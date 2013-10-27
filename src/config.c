@@ -95,7 +95,8 @@ filter_destroy (filter_t *filter)
 	if ( filter->cmd_session_end != NULL )
 		free (filter->cmd_session_end);
 	
-	memset (filter, 0, sizeof (filter_t));
+	free (filter);
+	filter = NULL;
 }
 
 //
@@ -311,5 +312,6 @@ conf_destroy (conf_t *conf)
 		filter_destroy (&(conf->filters[i]));
 	
 	free (conf);
+	conf = NULL;
 }
 

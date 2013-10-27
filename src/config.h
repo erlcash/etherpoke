@@ -14,6 +14,7 @@ typedef struct
 {
 	char *name;
 	char *eth_addr;
+	char *eth_addr_bin;
 	char *cmd_session_begin;
 	char *cmd_session_end;
 } filter_t;
