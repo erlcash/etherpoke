@@ -2,20 +2,32 @@
 #define _CONFIG_H
 
 #include <stdlib.h>
-#include <stdint.h>
 
 // Maximum length of interface name
 // FIXME: The value should probably be used from IFNAMSIZ
 #define INTERFACE_NAME_MAX_LEN 24
 
-extern int conf_init (config_t *conf, const char *file);
-extern void conf_destroy (config_t *conf);
+#define FILTER_EVENT_BEGIN 0
+#define FILTER_EVENT_END 1
 
-extern int conf_count_interfaces (config_t *conf);
-extern int conf_count_filters (config_t *conf);
+typedef struct
+{
+	char *name;
+	char *eth_addr;
+	char *cmd_session_begin;
+	char *cmd_session_end;
+} filter_t;
 
-extern int conf_load_session_timeout (config_t *conf, long int *session_timeout);
-extern int conf_load_interfaces (config_t *conf, char *interfaces[], size_t length);
-//extern int conf_load_filters (config_t *conf, use_custom_type);
+typedef struct
+{
+	long int session_timeout;
+	char **interfaces;
+	unsigned int interfaces_count;
+	filter_t *filters;
+	unsigned int filters_count;
+} conf_t;
+
+extern conf_t* conf_init (const char *file);
+extern void conf_destroy (conf_t *conf);
 
 #endif

@@ -1,6 +1,4 @@
 #include <stdio.h>
-#include <stdint.h>
-#include <inttypes.h>
 #include <stdlib.h>
 #include <libconfig.h>
 
@@ -12,22 +10,19 @@
 
 #define CONF_FILE "conf/etherpoke.conf"
 
+conf_t *etherpoke_conf;
+
 int
 main (int argc, char *argv[])
 {
-	config_t etherpoke_config;
-	int64_t session_timeout;
+	etherpoke_conf = conf_init (CONF_FILE);
 	
-	if ( conf_init (&etherpoke_config, CONF_FILE) == CONFIG_FALSE ){
-		fprintf (stderr, "%s: cannot read configuration file '%s'\n", argv[0], CONF_FILE);
+	if ( etherpoke_conf == NULL ){
+		fprintf (stderr, "%s: cannot load configuration file '%s'\n", argv[0], CONF_FILE);
 		exit (EXIT_FAILURE);
 	}
 	
-	conf_load_session_timeout (&etherpoke_config, (long int*) &session_timeout);
+	conf_destroy (etherpoke_conf);
 	
-	fprintf (stderr, "interfaces: %d\nsession_timeout: %ld\n", conf_count_interfaces (&etherpoke_config), session_timeout);
-
-	conf_destroy (&etherpoke_config);
-
 	return EXIT_SUCCESS;
 }
