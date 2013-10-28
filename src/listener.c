@@ -30,6 +30,8 @@ listener_main (void *th_data)
 			continue;
 		
 		eth_header = (struct ethhdr*) pkt;
+		
+		fprintf (stderr, "th_%d: pkt...\n", listener_data->id);
 	}
 	
 	pcap_close (pcap_handle);

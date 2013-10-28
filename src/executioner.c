@@ -6,9 +6,14 @@
 void*
 executioner_main (void *th_data)
 {
-	for ( ;; ){
-		fprintf (stderr, "cutting the heads\n");
-		sleep (2);
+	executioner_data_t *executioner_data;
+	
+	executioner_data = (executioner_data_t*) th_data;
+	
+	fprintf (stderr, "th_%d: executioner spawned\n", executioner_data->id);
+	
+	for ( ;; ){	
+		sleep (1);
 	}
 	
 	pthread_exit (NULL);

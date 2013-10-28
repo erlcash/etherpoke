@@ -13,7 +13,6 @@
 #define CONF_FILE "conf/etherpoke.conf"
 
 conf_t *etherpoke_conf = NULL;
-pthread_t *threads = NULL;
 
 // Callback for signals leading to an end of execution of the program
 static
@@ -32,8 +31,11 @@ void signal_reconf (int signo)
 int
 main (int argc, char *argv[])
 {
+	pthread_t *threads;
 	pthread_attr_t thread_attr;
 	listener_data_t *listener_data;
+	worker_data_t worker_data;
+	executioner_data_t executioner_data;
 	int i, th_rc;
 	
 	etherpoke_conf = conf_init (CONF_FILE);
@@ -63,8 +65,6 @@ main (int argc, char *argv[])
 		exit (EXIT_FAILURE);
 	}
 	
-	fprintf (stderr, "interfaces: %d\n", etherpoke_conf->interfaces_count);
-	
 	// Spawn listeners
 	for ( i = 0; i < etherpoke_conf->interfaces_count; i++ ){
 		listener_data[i].id = i;
@@ -80,7 +80,8 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn worker
-	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, worker_main, NULL);
+	worker_data.id = etherpoke_conf->interfaces_count;
+	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, worker_main, (void*) &worker_data);
 	
 	if ( th_rc != 0 ){
 		fprintf (stderr, "%s: cannot spawn worker thread\n", argv[0]);
@@ -88,7 +89,8 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn executioner
-	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count + 1]), &thread_attr, executioner_main, NULL);
+	executioner_data.id = etherpoke_conf->interfaces_count + 1;
+	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count + 1]), &thread_attr, executioner_main, (void*) &executioner_data);
 	
 	if ( th_rc != 0 ){
 		fprintf (stderr, "%s: cannot spawn executioner thread\n", argv[0]);
@@ -107,16 +109,9 @@ main (int argc, char *argv[])
 		}
 	}
 	
-	// Setup signal handlers
-	signal (SIGTERM, signal_death);
-	signal (SIGKILL, signal_death);
-	signal (SIGQUIT, signal_death);
-	signal (SIGHUP, signal_reconf);
-	
 	free (threads);
 	free (listener_data);
 	conf_destroy (etherpoke_conf);
 	
-	pthread_exit (NULL);
-	//return EXIT_SUCCESS;
+	pthread_exit ((void*) 0);
 }
