@@ -2,6 +2,7 @@
 #define _CONFIG_H
 
 #include <stdlib.h>
+#include <stdint.h>
 
 // Maximum length of interface name
 // FIXME: The value should probably be used from IFNAMSIZ
@@ -14,7 +15,7 @@ typedef struct
 {
 	char *name;
 	char *eth_addr;
-	char *eth_addr_bin;
+	uint16_t eth_addr_bin;
 	char *cmd_session_begin;
 	char *cmd_session_end;
 } filter_t;
