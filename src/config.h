@@ -15,9 +15,10 @@ typedef struct
 {
 	char *name;
 	char *eth_addr;
-	uint16_t eth_addr_bin;
+	uint8_t eth_addr_bin[6];
 	char *cmd_session_begin;
 	char *cmd_session_end;
+	uint32_t session_timeout;
 } filter_t;
 
 typedef struct

@@ -3,7 +3,7 @@
 
 #include "config.h"
 
-#define SNAPSHOT_LENGTH 4096
+#define SNAPSHOT_LENGTH 65535
 
 typedef struct
 {

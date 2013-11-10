@@ -1,0 +1,9 @@
+1. Description
+etherpoke is a daemon listening on network interface/s, reading source Ethernet address and packet's timestamp in order to determine if the device is present in the network.
+
+Administator can hook up a custom command on etherpoke events, these commands are run when the event is triggered. Supported events are: SESSION_BEGIN and SESSION_END.
+
+Event SESSION_BEGIN is triggered when the first packet with designated Ethernet source address is captured.
+Event SESSION_END is triggered when a time since last captured packet with designated Ethernet source address exceeds the session timeout.
+
+This allows to run certain commands everytime a desired device is connected and when the device is no longer communicating for certain amount of time.

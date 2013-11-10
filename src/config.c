@@ -4,21 +4,6 @@
 
 #include "config.h"
 
-static filter_t*
-filter_init (void)
-{
-	filter_t *filter;
-	
-	filter = (filter_t*) malloc (sizeof (filter_t));
-	
-	if ( filter == NULL )
-		return NULL;
-	
-	memset (filter, 0, sizeof (filter_t));
-	
-	return filter;
-}
-
 static int
 filter_set_name (filter_t *filter, const char *name)
 {
@@ -50,6 +35,10 @@ filter_set_ethaddr (filter_t *filter, const char *eth_addr)
 	strncpy (filter->eth_addr, eth_addr, strlen (eth_addr));
 	filter->eth_addr[strlen (eth_addr)] = '\0';
 	
+	// Convert string representation to the 6 byte representation
+	sscanf (filter->eth_addr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &(filter->eth_addr_bin[0]), &(filter->eth_addr_bin[1]),
+													&(filter->eth_addr_bin[2]), &(filter->eth_addr_bin[3]),
+													&(filter->eth_addr_bin[4]), &(filter->eth_addr_bin[5]));
 	return 0;
 }
 
@@ -79,6 +68,14 @@ filter_set_event (filter_t *filter, const char *cmd, int type)
 	
 	strncpy (*event_type, cmd, strlen (cmd));
 	*((*event_type) + strlen (cmd)) = '\0';
+	
+	return 0;
+}
+
+static int
+filter_set_session_timeout (filter_t *filter, uint32_t session_timeout)
+{
+	filter->session_timeout = session_timeout;
 	
 	return 0;
 }
@@ -168,6 +165,7 @@ conf_load_filters (config_t *conf, filter_t *filters, size_t length)
 {
 	const config_setting_t *setting_filters, *filter;
 	const char *val;
+	long num;
 	int i;
 	
 	setting_filters = config_lookup (conf, "filters");
@@ -202,6 +200,11 @@ conf_load_filters (config_t *conf, filter_t *filters, size_t length)
 			return CONFIG_FALSE;
 		
 		filter_set_event (&(filters[i]), val, FILTER_EVENT_END);
+		
+		if ( config_setting_lookup_int (filter, "session_timeout", &num) == CONFIG_FALSE )
+			return CONFIG_FALSE;
+		
+		filter_set_session_timeout (&(filters[i]), num);
 	}
 	
 	return CONFIG_TRUE;
