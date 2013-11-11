@@ -21,7 +21,7 @@ queue_t packet_queue;
 pthread_mutex_t packet_queue_mut = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t packet_queue_cond = PTHREAD_COND_INITIALIZER;
 
-// Callback for signals leading to an end of execution of the program
+// Callback for signals leading to an end of the program
 static
 void signal_death (int signo)
 {

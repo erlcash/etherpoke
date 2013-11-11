@@ -5,6 +5,7 @@ config/
 Makefile.in
 Makefile
 src/.deps
+src/etherpoke
 config.log
 config.status
 *.o

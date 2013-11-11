@@ -22,9 +22,9 @@ executioner_main (void *th_data)
 {
 	executioner_data_t *executioner_data;
 	session_t *sessions;
-	metapkt_t *meta_pkt;
+	metapkt_t *meta_pkt[METAPKT_BUFF_LEN];
 	time_t current_time;
-	int i;
+	int i, j;
 	
 	executioner_data = (executioner_data_t*) th_data;
 	sessions = (session_t*) malloc (sizeof (session_t) * etherpoke_conf->filters_count);
@@ -35,6 +35,7 @@ executioner_main (void *th_data)
 	}
 	
 	memset (sessions, 0, sizeof (session_t) * etherpoke_conf->filters_count);
+	memset (meta_pkt, 0, sizeof (metapkt_t*) * METAPKT_BUFF_LEN);
 	
 	fprintf (stderr, "th_%d: executioner spawned\n", executioner_data->id);
 	
@@ -42,44 +43,51 @@ executioner_main (void *th_data)
 		pthread_mutex_lock (&packet_queue_mut);
 		pthread_cond_wait (&packet_queue_cond, &packet_queue_mut);
 		
-		// Load value from queue
-		meta_pkt = (metapkt_t*) queue_dequeue (&packet_queue);
+		// Load a bunch of metapkts from the queue
+		for ( j = 0; j < METAPKT_BUFF_LEN; j++ ){
+			meta_pkt[j] = (metapkt_t*) queue_dequeue (&packet_queue);
+			
+			if ( meta_pkt[j] == NULL )
+				break;
+		}
 		
 		pthread_mutex_unlock (&packet_queue_mut);
 		
-		if ( meta_pkt == NULL ){
-			fprintf (stderr, "th_%d: nothing in queue\n", executioner_data->id);
-			continue;
-		}
+		for ( j = 0; j < METAPKT_BUFF_LEN; j++ ){
+			
+			if ( meta_pkt[j] == NULL ) // leave the loop - the end of buffer was reached
+				break;
 		
-		for ( i = 0; i < etherpoke_conf->filters_count; i++ ){
-			// The packet came from the address matching the filter
-			if ( memcmp (meta_pkt->eth_addr, etherpoke_conf->filters[i].eth_addr_bin, sizeof (meta_pkt->eth_addr)) == 0 ){
-				
-				if ( sessions[i].ts == 0 ){
-					fprintf (stderr, "th_%d: triggering SESSION_BEGIN for '%s'\n", executioner_data->id, etherpoke_conf->filters[i].name);
-					// trigger event SESSION_BEGIN
+			for ( i = 0; i < etherpoke_conf->filters_count; i++ ){
+				// The packet came from the address matching the filter
+				if ( memcmp (meta_pkt[j]->eth_addr, etherpoke_conf->filters[i].eth_addr_bin, sizeof (meta_pkt[j]->eth_addr)) == 0 ){
+					
+					if ( sessions[i].ts == 0 ){
+						fprintf (stderr, "th_%d: triggering SESSION_BEGIN for filter '%s'\n", executioner_data->id, etherpoke_conf->filters[i].name);
+						// trigger event SESSION_BEGIN
+					}
+					
+					sessions[i].ts = (time_t) meta_pkt[j]->ts;
+					continue;
 				}
 				
-				sessions[i].ts = (time_t) meta_pkt->ts;
-				continue;
+				// Check session timeouts.
+				// The session that was not yet established must be skipped otherwise SESSION_END would be triggered.
+				if ( sessions[i].ts == 0 )
+					continue;
+				
+				time (&current_time);
+				
+				if ( difftime (current_time, sessions[i].ts) >= etherpoke_conf->filters[i].session_timeout ){
+					fprintf (stderr, "th_%d: triggering SESSION_END for filter '%s'\n", executioner_data->id, etherpoke_conf->filters[i].name);
+					sessions[i].ts = 0;
+					// trigger event SESSION_END
+				}
 			}
 			
-			// Check session timeouts.
-			// The session that was not yet established must be skipped otherwise SESSION_END would be triggered.
-			if ( sessions[i].ts == 0 )
-				continue;
-			
-			time (&current_time);
-			
-			if ( difftime (current_time, sessions[i].ts) > etherpoke_conf->filters[i].session_timeout ){
-				fprintf (stderr, "th_%d: triggering SESSION_END for '%s'\n", executioner_data->id, etherpoke_conf->filters[i].name);
-				sessions[i].ts = 0;
-				// trigger event SESSION_END
-			}
+			metapkt_destroy (meta_pkt[j]);
+			meta_pkt[j] = NULL;
 		}
-		
-		metapkt_destroy (meta_pkt);
 	}
 	
 	pthread_exit (NULL);
