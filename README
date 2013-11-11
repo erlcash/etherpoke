@@ -1,9 +1,67 @@
 1. Description
-etherpoke is a daemon listening on network interface/s, reading source Ethernet address and packet's timestamp in order to determine if the device is present in the network.
+etherpoke is a daemon listening on network interface/s monitoring a session of
+devices connected to network.
 
-Administator can hook up a custom command on etherpoke events, these commands are run when the event is triggered. Supported events are: SESSION_BEGIN and SESSION_END.
+A list of monitored devices is available in the configuration file.
+Each filter contains an Ethernet address of the device, a pair of event hooks
+and session timeout.
 
-Event SESSION_BEGIN is triggered when the first packet with designated Ethernet source address is captured.
-Event SESSION_END is triggered when a time since last captured packet with designated Ethernet source address exceeds the session timeout.
+etherpoke defines two events: SESSION_BEGIN, SESSION_END.
 
-This allows to run certain commands everytime a desired device is connected and when the device is no longer communicating for certain amount of time.
+Event SESSION_BEGIN is triggered when the first packet with source address,
+matching the filter, is captured.
+Event SESSION_END is triggered after the time, since the last captured packet
+with source address matching the filter, exceeds session_timeout.
+
+The value of the event hook can be any program available in the system.
+The program is executed by /bin/sh.
+
+Data retrieved and manipulated by etherpoke are Ethernet source address and packet's capture
+timestamp.
+
+2. Installation
+
+** THIS SECTION SHOULD BE UPDATED **
+
+I do not recommend using the software, yet. It's still work in progress with
+plenty of bugs and design issues (possibly). Automake is not working. If you are
+a lazy developer, use:
+
+gcc *.c -o etherpoke -ggdb -Wall -lpcap -lpthread -lconfig
+
+If you are a lazy developer who can't stand using the command, fix it and submit
+the changes! I would certainly appreciate it.
+
+3. Configuration
+This is an example of configuration file:
+
+common:{
+	# Listen on these interfaces
+	interfaces = ( "wlan0", "eth0", "eth1", "eth2" );
+	
+	# How long to wait in seconds before the session expires triggering the event SESSION_END
+	# Deprecated, session_timeout is specified separately for each device (filter).
+	session_timeout = 1800;
+};
+
+filters:{
+	# Filter name (use anything relevant)
+	b2x2_wifi: {
+		mac_addr = "1c:4b:d6:ed:80:60";
+		session_begin = "echo 'hello world' >> /tmp/b2x2_wifi.out";
+		session_end = "echo 'goodbye world' >> /tmp/b2x2_wifi.out";
+		session_timeout = 60; # seconds
+	};
+	
+	my_phone: {
+		mac_addr = "20:cf:30:49:4d:30";
+		session_begin = "echo 'hello world' >> /tmp/my_phone.out";
+		session_end = "echo 'goodbye world' >> /tmp/my_phone.out";
+		session_timeout = 25; # seconds
+	};
+	
+	# Other filters...
+};
+
+4. Application
+** THIS SECTION SHOULD BE UPDATED **
