@@ -8,10 +8,10 @@ and session timeout.
 
 etherpoke defines two events: SESSION_BEGIN, SESSION_END.
 
-Event SESSION_BEGIN is triggered when the first packet with source address,
+Event SESSION_BEGIN is triggered when the first packet, with source address
 matching the filter, is captured.
 Event SESSION_END is triggered after the time, since the last captured packet
-with source address matching the filter, exceeds session_timeout.
+, with source address matching the filter, exceeds session_timeout.
 
 The value of the event hook can be any program available in the system.
 The program is executed by /bin/sh.
@@ -63,5 +63,11 @@ filters:{
 	# Other filters...
 };
 
-4. Application
+4. Dependencies
+- glibc (version **find.out**)
+- libpcap (version **find.out**)
+- libpthread (version **find.out**)
+- libconfig (version **find.out**)
+
+5. Applications
 ** THIS SECTION SHOULD BE UPDATED **
