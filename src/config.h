@@ -25,9 +25,9 @@ typedef struct
 {
 	long int session_timeout;
 	char **interfaces;
-	unsigned int interfaces_count;
+	uint8_t interfaces_count;
 	filter_t *filters;
-	unsigned int filters_count;
+	uint16_t filters_count;
 } conf_t;
 
 extern conf_t* conf_init (const char *file);
