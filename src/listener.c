@@ -31,9 +31,57 @@
 #include "metapkt.h"
 #include "listener.h"
 
+extern conf_t *etherpoke_conf;
+
 extern queue_t packet_queue;
 extern pthread_mutex_t packet_queue_mut;
 extern pthread_cond_t packet_queue_cond;
+
+/*
+ * Allocate and populate a buffer with bpf program.
+ */
+static char*
+listener_bpf_prog_init (filter_t *filters, uint16_t filter_count)
+{
+	char *bpf_prog, *bpf_template;
+	uint16_t bpf_prog_len;
+	uint8_t insert_or;
+	int i;
+	
+	bpf_prog_len = ((LISTENER_BPF_TEMPL_LEN * filter_count) + (LISTENER_BPF_LOGOPER_LEN * (filter_count - 1)) + 1);
+	bpf_prog = (char*) calloc (bpf_prog_len, sizeof (char));
+	
+	if ( bpf_prog == NULL )
+		return NULL;
+	
+	insert_or = 0;
+	for ( i = 0; i < filter_count; i++ ){
+		bpf_template = (char*) calloc (LISTENER_BPF_TEMPL_LEN + 1, sizeof (char));
+		
+		if ( bpf_template == NULL )
+			return NULL;
+		
+		sprintf (bpf_template, LISTENER_BPF_TEMPL, filters[i].eth_addr);
+		
+		if ( insert_or )
+			strncat (bpf_prog, " or ", LISTENER_BPF_LOGOPER_LEN);
+		
+		strncat (bpf_prog, bpf_template, LISTENER_BPF_TEMPL_LEN);
+		free (bpf_template);
+		insert_or = 1;
+	}
+	
+	return bpf_prog;
+}
+
+/*
+ * Free allocated buffer with bpf program.
+ */
+void
+listener_bpf_prog_destroy (char *bpf_prog)
+{
+	free (bpf_prog);
+}
 
 void*
 listener_main (void *th_data)
@@ -41,6 +89,8 @@ listener_main (void *th_data)
 	listener_data_t *listener_data;
 	pcap_t *pcap_handle;
 	struct pcap_pkthdr pkt_header;
+	struct bpf_program bpf_prog; // berkeley packet filter program
+	char *bpf_program_str;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	const u_char *pkt = NULL;
 	struct ethhdr *eth_header;
@@ -53,6 +103,27 @@ listener_main (void *th_data)
 	if ( pcap_handle == NULL ){
 		fprintf (stderr, "th_%d: cannot open device '%s': %s\n", listener_data->id, listener_data->interface, errbuf);
 		pthread_exit (NULL);
+	}
+	
+	bpf_program_str = listener_bpf_prog_init (etherpoke_conf->filters, etherpoke_conf->filters_count);
+	
+	if ( bpf_program_str == NULL ){
+		fprintf (stderr, "th_%d: cannot initialize bpf program\n", listener_data->id);
+		abort (); // die! we are probably without memory.
+	}
+	
+	fprintf (stderr, "th_%d: bpf_prog %s\n", listener_data->id, bpf_program_str);
+	
+	if ( pcap_compile (pcap_handle, &bpf_prog, bpf_program_str, 0, PCAP_NETMASK_UNKNOWN) == -1 ){
+		fprintf (stderr, "th_%d: cannot compile a bpf program\n", listener_data->id);
+		abort ();
+	}
+	
+	listener_bpf_prog_destroy (bpf_program_str);
+	
+	if ( pcap_setfilter (pcap_handle, &bpf_prog) == -1 ){
+		fprintf (stderr, "th_%d: cannot apply bpf program\n", listener_data->id);
+		abort ();
 	}
 	
 	fprintf (stderr, "th_%d: listener spawned (%s)\n", listener_data->id, listener_data->interface);
