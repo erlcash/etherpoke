@@ -21,5 +21,21 @@
  * 
  */
 
+#include <pthread.h>
+#include <time.h>
 #include "session.h"
 
+void
+session_init (session_t *session)
+{
+	pthread_mutex_init (&(session->mut), NULL);
+	session->ts = 0;
+}
+
+void
+session_set_time (session_t *session, time_t ts)
+{
+	pthread_mutex_lock (&(session->mut));
+	session->ts = ts;
+	pthread_mutex_unlock (&(session->mut));
+}
