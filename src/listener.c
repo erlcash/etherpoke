@@ -64,7 +64,7 @@ listener_bpf_prog_init (filter_t *filters, uint16_t filter_count)
 		sprintf (bpf_template, LISTENER_BPF_TEMPL, filters[i].eth_addr);
 		
 		if ( insert_or )
-			strncat (bpf_prog, " or ", LISTENER_BPF_LOGOPER_LEN);
+			strncat (bpf_prog, LISTENER_BPG_LOGOPER, LISTENER_BPF_LOGOPER_LEN);
 		
 		strncat (bpf_prog, bpf_template, LISTENER_BPF_TEMPL_LEN);
 		free (bpf_template);
@@ -101,8 +101,8 @@ listener_main (void *th_data)
 	pcap_handle = pcap_open_live (listener_data->interface, SNAPSHOT_LENGTH, 1, 0, errbuf);
 	
 	if ( pcap_handle == NULL ){
-		fprintf (stderr, "th_%d: cannot open device '%s': %s\n", listener_data->id, listener_data->interface, errbuf);
-		pthread_exit (NULL);
+		fprintf (stderr, "th_%d: cannot open device %s\n", listener_data->id, errbuf);
+		pthread_exit ((void*) EXIT_FAILURE);
 	}
 	
 	bpf_program_str = listener_bpf_prog_init (etherpoke_conf->filters, etherpoke_conf->filters_count);
@@ -147,7 +147,7 @@ listener_main (void *th_data)
 		pthread_mutex_lock (&packet_queue_mut);
 		if ( queue_enqueue (&packet_queue, (void*) meta_pkt) == NULL ){
 			fprintf (stderr, "th_%d: cannot enqueue packet\n", listener_data->id);
-			pthread_exit (NULL);
+			pthread_exit ((void*) EXIT_FAILURE);
 		}
 		pthread_cond_signal (&packet_queue_cond); // signal executioner
 		pthread_mutex_unlock (&packet_queue_mut);
@@ -155,5 +155,5 @@ listener_main (void *th_data)
 	
 	pcap_close (pcap_handle);
 	
-	pthread_exit (NULL);
+	pthread_exit ((void*) EXIT_SUCCESS);
 }
