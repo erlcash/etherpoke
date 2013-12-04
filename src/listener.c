@@ -31,8 +31,6 @@
 #include "metapkt.h"
 #include "listener.h"
 
-extern conf_t *etherpoke_conf;
-
 extern queue_t packet_queue;
 extern pthread_mutex_t packet_queue_mut;
 extern pthread_cond_t packet_queue_cond;
@@ -105,7 +103,7 @@ listener_main (void *th_data)
 		pthread_exit ((void*) EXIT_FAILURE);
 	}
 	
-	bpf_program_str = listener_bpf_prog_init (etherpoke_conf->filters, etherpoke_conf->filters_count);
+	bpf_program_str = listener_bpf_prog_init (listener_data->config->filters, listener_data->config->filters_count);
 	
 	if ( bpf_program_str == NULL ){
 		fprintf (stderr, "th_%d: cannot initialize bpf program\n", listener_data->id);
@@ -156,4 +154,12 @@ listener_main (void *th_data)
 	pcap_close (pcap_handle);
 	
 	pthread_exit ((void*) EXIT_SUCCESS);
+}
+
+void
+listener_set_data (listener_data_t *data, int thread_id, const conf_t *config, const char *interface)
+{
+	data->id = thread_id;
+	data->config = config;
+	data->interface = interface;
 }

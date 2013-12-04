@@ -34,7 +34,6 @@
 #include "session.h"
 #include "executioner.h"
 
-extern conf_t *etherpoke_conf;
 extern session_t *sessions;
 
 extern queue_t packet_queue;
@@ -74,8 +73,8 @@ executioner_main (void *th_data)
 				break;
 			
 			// FIXME: This should be replaced by search in hashmap...
-			for ( i = 0; i < etherpoke_conf->filters_count; i++ ){
-				if ( memcmp (meta_pkt[j]->eth_addr, etherpoke_conf->filters[i].eth_addr_bin, sizeof (meta_pkt[j]->eth_addr)) == 0 ){
+			for ( i = 0; i < executioner_data->config->filters_count; i++ ){
+				if ( memcmp (meta_pkt[j]->eth_addr, executioner_data->config->filters[i].eth_addr_bin, sizeof (meta_pkt[j]->eth_addr)) == 0 ){
 					session_set_time (&(sessions[i]), (time_t) meta_pkt[j]->ts);
 					continue;
 				}
@@ -87,4 +86,11 @@ executioner_main (void *th_data)
 	}
 	
 	pthread_exit ((void*) 0);
+}
+
+void
+executioner_set_data (executioner_data_t *data, int thread_id, const conf_t *config)
+{
+	data->id = thread_id;
+	data->config = config;
 }

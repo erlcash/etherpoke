@@ -39,7 +39,6 @@
 #include "executioner.h"
 #include "clocker.h"
 
-conf_t *etherpoke_conf = NULL;
 session_t *sessions = NULL;
 
 pthread_t *threads = NULL;
@@ -77,16 +76,10 @@ void signal_death (int signo)
 	exit (signo);
 }
 
-// Callback for reconfiguration
-static
-void signal_reconf (int signo)
-{
-	fprintf (stderr, "reconfiguring...\n");
-}
-
 int
 main (int argc, char *argv[])
 {
+	conf_t *etherpoke_conf;
 	pthread_attr_t thread_attr;
 	listener_data_t *listener_data;
 	executioner_data_t executioner_data;
@@ -94,6 +87,7 @@ main (int argc, char *argv[])
 	char *config_file, conf_errbuf[CONF_ERRBUF_SIZE];
 	int i, c, th_rc;
 	
+	etherpoke_conf = NULL;
 	config_file = NULL;
 	
 	while ( (c = getopt (argc, argv, "c:dhv")) != -1 ){
@@ -175,10 +169,7 @@ main (int argc, char *argv[])
 	
 	// Spawn listeners
 	for ( i = 0; i < etherpoke_conf->interfaces_count; i++ ){
-		listener_data[i].id = i;
-		listener_data[i].interface = etherpoke_conf->interfaces[i];
-		listener_data[i].filters = etherpoke_conf->filters;
-		
+		listener_set_data (&(listener_data[i]), i, (const conf_t*) etherpoke_conf, (const char*) etherpoke_conf->interfaces[i]);		
 		th_rc = pthread_create (&(threads[i]), &thread_attr, listener_main, (void*) &(listener_data[i]));
 		
 		if ( th_rc != 0 ){
@@ -188,7 +179,7 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn executioner
-	executioner_data.id = etherpoke_conf->interfaces_count - 1;
+	executioner_set_data (&executioner_data, etherpoke_conf->interfaces_count - 1, (const conf_t*) etherpoke_conf);
 	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count - 1]), &thread_attr, executioner_main, (void*) &executioner_data);
 	
 	if ( th_rc != 0 ){
@@ -197,18 +188,15 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn clocker
-	clocker_data.id = etherpoke_conf->interfaces_count;
+	clocker_set_data (&clocker_data, etherpoke_conf->interfaces_count, (const conf_t*) etherpoke_conf);
 	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, clocker_main, (void*) &clocker_data);
 	
 	if ( th_rc != 0 ){
 		fprintf (stderr, "%s: cannot spawn clocker thread\n", argv[0]);
 		exit (EXIT_FAILURE);
 	}
-		
-	pthread_attr_destroy (&thread_attr);
 	
-	signal (SIGTERM, signal_death); signal (SIGINT, signal_death); signal (SIGQUIT, signal_death);
-	signal (SIGHUP, signal_reconf);
+	pthread_attr_destroy (&thread_attr);
 	
 	// Wait for threads to finish (don't forget to wait for executioner, hence + 1)
 	for ( i = 0; i < etherpoke_conf->interfaces_count + 2; i++ ){
@@ -227,4 +215,5 @@ main (int argc, char *argv[])
 	free (config_file);
 	
 	pthread_exit ((void*) 0);
+	return EXIT_SUCCESS;
 }

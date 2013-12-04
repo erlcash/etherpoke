@@ -24,11 +24,15 @@
 #ifndef _CLOCKER_H
 #define _CLOCKER_H
 
+#include "config.h"
+
 typedef struct
 {
 	int id;
+	const conf_t *config;
 } clocker_data_t;
 
 extern void* clocker_main (void *th_data);
+extern void clocker_set_data (clocker_data_t *data, int thread_id, const conf_t *config);
 
 #endif

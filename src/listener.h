@@ -39,10 +39,11 @@
 typedef struct
 {
 	int id;
-	char *interface;
-	filter_t *filters;
+	const char *interface;
+	const conf_t *config;
 } listener_data_t;
 
 extern void* listener_main (void *th_data);
+extern void listener_set_data (listener_data_t *data, int thread_id, const conf_t *config, const char *interface);
 
 #endif

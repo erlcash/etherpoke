@@ -35,7 +35,6 @@
 #include "session.h"
 #include "clocker.h"
 
-extern conf_t *etherpoke_conf;
 extern session_t *sessions;
 
 static int
@@ -78,7 +77,7 @@ clocker_main (void *th_data)
 	
 	clocker_data = (clocker_data_t*) th_data;
 	
-	sessions_ref = (session_t*) malloc (sizeof (session_t) * etherpoke_conf->filters_count);
+	sessions_ref = (session_t*) malloc (sizeof (session_t) * clocker_data->config->filters_count);
 	
 	if ( sessions_ref == NULL ){
 		fprintf (stderr, "th_%d: cannot allocate memory for the reference session data\n", clocker_data->id);
@@ -86,14 +85,14 @@ clocker_main (void *th_data)
 	}
 	
 	// Decide which line apply... too tired right now...
-	memset (sessions_ref, 0, sizeof (session_t) * etherpoke_conf->filters_count);
+	memset (sessions_ref, 0, sizeof (session_t) * clocker_data->config->filters_count);
 	
 	fprintf (stderr, "th_%d: clocker spawned\n", clocker_data->id);
 	
 	for ( ;; ){
 		time (&current_time);
 		
-		for ( i = 0; i < etherpoke_conf->filters_count; i++ ){
+		for ( i = 0; i < clocker_data->config->filters_count; i++ ){
 			if ( (sessions_ref[i].ts == 0) && (sessions[i].ts > 0) ){
 				sessions_ref[i].ts = sessions[i].ts;
 				
@@ -102,8 +101,8 @@ clocker_main (void *th_data)
 				pid = fork ();
 				
 				if ( pid == 0 ){
-					if ( clocker_exec (etherpoke_conf->filters[i].cmd_session_begin) == EXIT_FAILURE ){
-						fprintf (stderr, "th_%d: cannot execute event hook '%s': %s\n", clocker_data->id, etherpoke_conf->filters[i].cmd_session_begin, "<REASON HERE>");
+					if ( clocker_exec (clocker_data->config->filters[i].cmd_session_begin) == EXIT_FAILURE ){
+						fprintf (stderr, "th_%d: cannot execute event hook '%s': %s\n", clocker_data->id, clocker_data->config->filters[i].cmd_session_begin, "<REASON HERE>");
 						exit (EXIT_FAILURE);
 					}
 					exit (EXIT_SUCCESS);
@@ -114,7 +113,7 @@ clocker_main (void *th_data)
 					abort ();
 				}
 			
-			} else if ( (sessions[i].ts > 0) && difftime (current_time, sessions[i].ts) >= etherpoke_conf->filters[i].session_timeout ){
+			} else if ( (sessions[i].ts > 0) && difftime (current_time, sessions[i].ts) >= clocker_data->config->filters[i].session_timeout ){
 				session_set_time (&(sessions[i]), 0);
 				sessions_ref[i].ts = 0;
 				
@@ -122,8 +121,8 @@ clocker_main (void *th_data)
 				pid = fork ();
 				
 				if ( pid == 0 ){
-					if ( clocker_exec (etherpoke_conf->filters[i].cmd_session_end) == EXIT_FAILURE ){
-						fprintf (stderr, "th_%d: cannot execute event hook '%s': %s\n", clocker_data->id, etherpoke_conf->filters[i].cmd_session_end, "<REASON HERE>");
+					if ( clocker_exec (clocker_data->config->filters[i].cmd_session_end) == EXIT_FAILURE ){
+						fprintf (stderr, "th_%d: cannot execute event hook '%s': %s\n", clocker_data->id, clocker_data->config->filters[i].cmd_session_end, "<REASON HERE>");
 						exit (EXIT_FAILURE);
 					}
 					exit (EXIT_SUCCESS);
@@ -144,43 +143,9 @@ clocker_main (void *th_data)
 	pthread_exit ((void*) 0);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-				// Check session timeouts.
-				// The session that was not yet established must be skipped otherwise SESSION_END would be triggered.
-				/*if ( sessions[i].ts == 0 )
-					continue;
-				
-				time (&current_time);
-				
-				if ( difftime (current_time, sessions[i].ts) >= etherpoke_conf->filters[i].session_timeout ){
-					fprintf (stderr, "th_%d: triggering SESSION_END for filter '%s'\n", executioner_data->id, etherpoke_conf->filters[i].name);
-					sessions[i].ts = 0;
-				}*/
-
-/*
-						// Trigger event SESSION_BEGIN
-						pid = fork ();
-						
-						if ( pid == 0 ){
-							if ( executioner_exec (etherpoke_conf->filters[i].cmd_session_begin) == EXIT_FAILURE ){
-								fprintf (stderr, "th_%d: cannot execute event hook '%s': %s\n", executioner_data->id, etherpoke_conf->filters[i].cmd_session_begin, "<REASON HERE>");
-								exit (EXIT_FAILURE);
-							}
-							exit (EXIT_SUCCESS);
-						}
-						
-						if ( pid == -1 ){
-							fprintf (stderr, "th_%d: cannot fork myself\n", executioner_data->id);
-							abort ();
-						}*/
+void
+clocker_set_data (clocker_data_t *data, int thread_id, const conf_t *config)
+{
+	data->id = thread_id;
+	data->config = config;
+}

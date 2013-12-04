@@ -24,6 +24,8 @@
 #ifndef _EXECUTIONER_H
 #define _EXECUTIONER_H
 
+#include "config.h"
+
 // Length of metapkt_t buffer, this represents how many packets is retrieved
 // from the packet queue in every cycle.
 #define METAPKT_BUFF_LEN 2048
@@ -31,8 +33,10 @@
 typedef struct
 {
 	int id;
+	const conf_t *config;
 } executioner_data_t;
 
 extern void* executioner_main (void *th_data);
+extern void executioner_set_data (executioner_data_t *data, int thread_id, const conf_t *config);
 
 #endif
