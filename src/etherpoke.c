@@ -29,14 +29,18 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#include "config.h"
+
 #include "etherpoke.h"
 #include "queue.h"
-#include "config.h"
+#include "session.h"
 
 #include "listener.h"
 #include "executioner.h"
+#include "clocker.h"
 
 conf_t *etherpoke_conf = NULL;
+session_t *sessions = NULL;
 
 pthread_t *threads = NULL;
 
@@ -86,7 +90,8 @@ main (int argc, char *argv[])
 	pthread_attr_t thread_attr;
 	listener_data_t *listener_data;
 	executioner_data_t executioner_data;
-	char *config_file;
+	clocker_data_t clocker_data;
+	char *config_file, conf_errbuf[CONF_ERRBUF_SIZE];
 	int i, c, th_rc;
 	
 	config_file = NULL;
@@ -126,20 +131,32 @@ main (int argc, char *argv[])
 		exit (EXIT_FAILURE);
 	}
 	
-	etherpoke_conf = conf_init (config_file);
+	etherpoke_conf = conf_init (config_file, conf_errbuf);
 	
 	if ( etherpoke_conf == NULL ){
-		fprintf (stderr, "%s: cannot load configuration file '%s'.\n", argv[0], config_file);
+		fprintf (stderr, "%s: cannot load configuration file '%s': %s\n", argv[0], config_file, conf_errbuf);
 		free (config_file);
 		exit (EXIT_FAILURE);
 	}
 	
+	// Initialize session data
+	sessions = (session_t*) malloc (sizeof (session_t) * etherpoke_conf->filters_count);
+	
+	if ( sessions == NULL ){
+		fprintf (stderr, "%s: cannot allocate memory for session data.\n", argv[0]);
+		exit (EXIT_FAILURE);
+	}
+	
+	for ( i = 0; i < etherpoke_conf->filters_count; i++ )
+		session_init (&(sessions[i]));
+	
+	// Initialize the packet queue
 	queue_init (&packet_queue);
 	
 	// Allocate memory space for thread structure.
 	// How many threads will be created is dependent on number of interfaces provided in configuration file
-	// plus 2 threads (worker and executioner).
-	threads = (pthread_t*) malloc (sizeof (pthread_t) * (etherpoke_conf->interfaces_count + (1)));
+	// plus 2 threads (clocker and executioner).
+	threads = (pthread_t*) malloc (sizeof (pthread_t) * (etherpoke_conf->interfaces_count + (2)));
 	
 	if ( threads == NULL ){
 		fprintf (stderr, "%s: cannot allocate memory for threads.\n", argv[0]);
@@ -171,23 +188,30 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn executioner
-	executioner_data.id = etherpoke_conf->interfaces_count;
-	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, executioner_main, (void*) &executioner_data);
+	executioner_data.id = etherpoke_conf->interfaces_count - 1;
+	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count - 1]), &thread_attr, executioner_main, (void*) &executioner_data);
 	
 	if ( th_rc != 0 ){
 		fprintf (stderr, "%s: cannot spawn executioner thread\n", argv[0]);
 		exit (EXIT_FAILURE);
 	}
 	
+	// Spawn clocker
+	clocker_data.id = etherpoke_conf->interfaces_count;
+	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, clocker_main, (void*) &clocker_data);
+	
+	if ( th_rc != 0 ){
+		fprintf (stderr, "%s: cannot spawn clocker thread\n", argv[0]);
+		exit (EXIT_FAILURE);
+	}
+		
 	pthread_attr_destroy (&thread_attr);
 	
-	signal (SIGTERM, signal_death);
-	signal (SIGINT, signal_death);
-	signal (SIGQUIT, signal_death);
+	signal (SIGTERM, signal_death); signal (SIGINT, signal_death); signal (SIGQUIT, signal_death);
 	signal (SIGHUP, signal_reconf);
 	
 	// Wait for threads to finish (don't forget to wait for executioner, hence + 1)
-	for ( i = 0; i < etherpoke_conf->interfaces_count + 1; i++ ){
+	for ( i = 0; i < etherpoke_conf->interfaces_count + 2; i++ ){
 		th_rc = pthread_join (threads[i], NULL); // maybe we could (should) take a look at the status returned from thread?
 		
 		if ( th_rc != 0 ){

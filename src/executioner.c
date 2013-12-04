@@ -35,6 +35,7 @@
 #include "executioner.h"
 
 extern conf_t *etherpoke_conf;
+extern session_t *sessions;
 
 extern queue_t packet_queue;
 extern pthread_mutex_t packet_queue_mut;
@@ -44,20 +45,11 @@ void*
 executioner_main (void *th_data)
 {
 	executioner_data_t *executioner_data;
-	session_t *sessions;
 	metapkt_t *meta_pkt[METAPKT_BUFF_LEN];
-	time_t current_time;
 	int i, j;
 	
 	executioner_data = (executioner_data_t*) th_data;
-	sessions = (session_t*) malloc (sizeof (session_t) * etherpoke_conf->filters_count);
-	
-	if ( sessions == NULL ){
-		fprintf (stderr, "th_%d: cannot allocate memory for sessions\n", executioner_data->id);
-		abort ();
-	}
-	
-	memset (sessions, 0, sizeof (session_t) * etherpoke_conf->filters_count);
+
 	memset (meta_pkt, 0, sizeof (metapkt_t*) * METAPKT_BUFF_LEN);
 	
 	fprintf (stderr, "th_%d: executioner spawned\n", executioner_data->id);
@@ -80,31 +72,12 @@ executioner_main (void *th_data)
 			
 			if ( meta_pkt[j] == NULL ) // leave the loop - the end of buffer was reached
 				break;
-		
+			
+			// FIXME: This should be replaced by search in hashmap...
 			for ( i = 0; i < etherpoke_conf->filters_count; i++ ){
-				// The packet came from the address matching the filter
 				if ( memcmp (meta_pkt[j]->eth_addr, etherpoke_conf->filters[i].eth_addr_bin, sizeof (meta_pkt[j]->eth_addr)) == 0 ){
-					
-					if ( sessions[i].ts == 0 ){
-						fprintf (stderr, "th_%d: triggering SESSION_BEGIN for filter '%s'\n", executioner_data->id, etherpoke_conf->filters[i].name);
-						// trigger event SESSION_BEGIN
-					}
-					
-					sessions[i].ts = (time_t) meta_pkt[j]->ts;
+					session_set_time (&(sessions[i]), (time_t) meta_pkt[j]->ts);
 					continue;
-				}
-				
-				// Check session timeouts.
-				// The session that was not yet established must be skipped otherwise SESSION_END would be triggered.
-				if ( sessions[i].ts == 0 )
-					continue;
-				
-				time (&current_time);
-				
-				if ( difftime (current_time, sessions[i].ts) >= etherpoke_conf->filters[i].session_timeout ){
-					fprintf (stderr, "th_%d: triggering SESSION_END for filter '%s'\n", executioner_data->id, etherpoke_conf->filters[i].name);
-					sessions[i].ts = 0;
-					// trigger event SESSION_END
 				}
 			}
 			
@@ -113,5 +86,5 @@ executioner_main (void *th_data)
 		}
 	}
 	
-	pthread_exit (NULL);
+	pthread_exit ((void*) 0);
 }
