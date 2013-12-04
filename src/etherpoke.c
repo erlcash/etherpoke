@@ -179,7 +179,7 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn executioner
-	executioner_set_data (&executioner_data, etherpoke_conf->interfaces_count - 1, (const conf_t*) etherpoke_conf);
+	executioner_set_data (&executioner_data, etherpoke_conf->interfaces_count, (const conf_t*) etherpoke_conf);
 	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count - 1]), &thread_attr, executioner_main, (void*) &executioner_data);
 	
 	if ( th_rc != 0 ){
@@ -188,7 +188,7 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn clocker
-	clocker_set_data (&clocker_data, etherpoke_conf->interfaces_count, (const conf_t*) etherpoke_conf);
+	clocker_set_data (&clocker_data, etherpoke_conf->interfaces_count + 1, (const conf_t*) etherpoke_conf);
 	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, clocker_main, (void*) &clocker_data);
 	
 	if ( th_rc != 0 ){
