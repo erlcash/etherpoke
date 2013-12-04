@@ -27,6 +27,7 @@
 #include <signal.h>
 #include <libconfig.h>
 #include <pthread.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -92,7 +93,8 @@ main (int argc, char *argv[])
 	executioner_data_t executioner_data;
 	clocker_data_t clocker_data;
 	char *config_file, conf_errbuf[CONF_ERRBUF_SIZE];
-	int i, c, th_rc, th_rval;
+	pid_t pid;
+	int i, c, th_rc, daemonize = 0;
 	
 	config_file = NULL;
 	
@@ -108,7 +110,7 @@ main (int argc, char *argv[])
 				break;
 			
 			case 'd':
-				// run as a daemon
+				daemonize = 1;
 				break;
 			
 			case 'h':
@@ -180,6 +182,29 @@ main (int argc, char *argv[])
 		exit (EXIT_FAILURE);
 	}
 	
+	// Daemonize the process if the flag was set
+	if ( daemonize == 1 ){
+		pid = fork ();
+		
+		if ( pid > 0 ){
+			exit (EXIT_SUCCESS);
+		} else if ( pid == -1 ){
+			fprintf (stderr, "%s: cannot daemonize the process (fork failed).\n", argv[0]);
+			exit (EXIT_FAILURE);
+		}
+		
+		if ( setsid () == -1 ){
+			fprintf (stderr, "%s: cannot daemonize the process (setsid failed).\n", argv[0]);
+			exit (EXIT_FAILURE);
+		}
+		
+		umask (0);
+		chdir ("/");
+		fclose (stdin);
+		fclose (stdout);
+		fclose (stderr);
+	}
+	
 	// Spawn listeners
 	for ( i = 0; i < etherpoke_conf->interfaces_count; i++ ){
 		listener_set_data (&(listener_data[i]), i, (const conf_t*) etherpoke_conf, (const char*) etherpoke_conf->interfaces[i]);	
@@ -235,6 +260,5 @@ main (int argc, char *argv[])
 	conf_destroy (etherpoke_conf);
 	free (config_file);
 	
-	pthread_exit ((void*) 0);
-	return EXIT_SUCCESS;
+	pthread_exit (NULL);
 }
