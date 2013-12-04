@@ -39,6 +39,7 @@
 typedef struct
 {
 	int id;
+	int loop_state;
 	const char *interface;
 	const conf_t *config;
 } listener_data_t;

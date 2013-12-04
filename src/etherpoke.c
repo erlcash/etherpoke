@@ -39,17 +39,20 @@
 #include "executioner.h"
 #include "clocker.h"
 
+conf_t *etherpoke_conf = NULL;
 session_t *sessions = NULL;
 
 pthread_t *threads = NULL;
+int **threads_loop_state = NULL;
 
+// Queue variables
 queue_t packet_queue;
 pthread_mutex_t packet_queue_mut = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t packet_queue_cond = PTHREAD_COND_INITIALIZER;
 
 // Print help
-static
-void etherpoke_help (const char *p)
+static void
+etherpoke_help (const char *p)
 {
 	fprintf (stdout, "%s v%s\n\nUsage:\n"
 					 "  %s [-dhv] -c <FILE>\n\n"
@@ -61,33 +64,36 @@ void etherpoke_help (const char *p)
 					 , p, ETHERPOKE_VER, p);
 }
 
-static
-void etherpoke_version (const char *p)
+static void
+etherpoke_version (const char *p)
 {
 	fprintf (stdout, "%s v%s\n", p, ETHERPOKE_VER);
 }
 
-// Callback for signals leading to an end of the program
-static
-void signal_death (int signo)
+static void
+etherpoke_die (int signo)
 {
-	fprintf (stderr, "signal caught (killing threads)...\n");
+	int i;
 	
-	exit (signo);
+	for ( i = 0; i < ETHERPOKE_THREAD_COUNT (etherpoke_conf->interfaces_count); i++ )
+		*(threads_loop_state[i]) = 0;
+	
+	// Signal executioner to unblock itself
+	pthread_mutex_lock (&packet_queue_mut);
+	pthread_cond_signal (&packet_queue_cond);
+	pthread_mutex_unlock (&packet_queue_mut);
 }
 
 int
 main (int argc, char *argv[])
 {
-	conf_t *etherpoke_conf;
 	pthread_attr_t thread_attr;
 	listener_data_t *listener_data;
 	executioner_data_t executioner_data;
 	clocker_data_t clocker_data;
 	char *config_file, conf_errbuf[CONF_ERRBUF_SIZE];
-	int i, c, th_rc;
+	int i, c, th_rc, th_rval;
 	
-	etherpoke_conf = NULL;
 	config_file = NULL;
 	
 	while ( (c = getopt (argc, argv, "c:dhv")) != -1 ){
@@ -121,7 +127,7 @@ main (int argc, char *argv[])
 	}
 	
 	if ( config_file == NULL ){
-		fprintf (stderr, "%s: configuration file not specified. Use '-h' to see help.\n", argv[0]);
+		fprintf (stderr, "%s: configuration file not specified. Use '-h' to see usage.\n", argv[0]);
 		exit (EXIT_FAILURE);
 	}
 	
@@ -132,6 +138,9 @@ main (int argc, char *argv[])
 		free (config_file);
 		exit (EXIT_FAILURE);
 	}
+	
+	// Initialize the packet queue
+	queue_init (&packet_queue);
 	
 	// Initialize session data
 	sessions = (session_t*) malloc (sizeof (session_t) * etherpoke_conf->filters_count);
@@ -144,16 +153,20 @@ main (int argc, char *argv[])
 	for ( i = 0; i < etherpoke_conf->filters_count; i++ )
 		session_init (&(sessions[i]));
 	
-	// Initialize the packet queue
-	queue_init (&packet_queue);
-	
 	// Allocate memory space for thread structure.
 	// How many threads will be created is dependent on number of interfaces provided in configuration file
 	// plus 2 threads (clocker and executioner).
-	threads = (pthread_t*) malloc (sizeof (pthread_t) * (etherpoke_conf->interfaces_count + (2)));
+	threads = (pthread_t*) malloc (sizeof (pthread_t) * ETHERPOKE_THREAD_COUNT(etherpoke_conf->interfaces_count));
 	
 	if ( threads == NULL ){
 		fprintf (stderr, "%s: cannot allocate memory for threads.\n", argv[0]);
+		exit (EXIT_FAILURE);
+	}
+	
+	threads_loop_state = (int**) malloc (sizeof (int*) * ETHERPOKE_THREAD_COUNT(etherpoke_conf->interfaces_count));
+	
+	if ( threads_loop_state == NULL ){
+		fprintf (stderr, "%s: cannot allocate memory for threads loop state.\n", argv[0]);
 		exit (EXIT_FAILURE);
 	}
 	
@@ -169,7 +182,8 @@ main (int argc, char *argv[])
 	
 	// Spawn listeners
 	for ( i = 0; i < etherpoke_conf->interfaces_count; i++ ){
-		listener_set_data (&(listener_data[i]), i, (const conf_t*) etherpoke_conf, (const char*) etherpoke_conf->interfaces[i]);		
+		listener_set_data (&(listener_data[i]), i, (const conf_t*) etherpoke_conf, (const char*) etherpoke_conf->interfaces[i]);	
+		threads_loop_state[i] = &(listener_data[i].loop_state);
 		th_rc = pthread_create (&(threads[i]), &thread_attr, listener_main, (void*) &(listener_data[i]));
 		
 		if ( th_rc != 0 ){
@@ -180,7 +194,8 @@ main (int argc, char *argv[])
 	
 	// Spawn executioner
 	executioner_set_data (&executioner_data, etherpoke_conf->interfaces_count, (const conf_t*) etherpoke_conf);
-	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count - 1]), &thread_attr, executioner_main, (void*) &executioner_data);
+	threads_loop_state[etherpoke_conf->interfaces_count] = &(executioner_data.loop_state);
+	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, executioner_main, (void*) &executioner_data);
 	
 	if ( th_rc != 0 ){
 		fprintf (stderr, "%s: cannot spawn executioner thread\n", argv[0]);
@@ -189,7 +204,8 @@ main (int argc, char *argv[])
 	
 	// Spawn clocker
 	clocker_set_data (&clocker_data, etherpoke_conf->interfaces_count + 1, (const conf_t*) etherpoke_conf);
-	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, clocker_main, (void*) &clocker_data);
+	threads_loop_state[etherpoke_conf->interfaces_count + 1] = &(clocker_data.loop_state);
+	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count + 1]), &thread_attr, clocker_main, (void*) &clocker_data);
 	
 	if ( th_rc != 0 ){
 		fprintf (stderr, "%s: cannot spawn clocker thread\n", argv[0]);
@@ -198,8 +214,12 @@ main (int argc, char *argv[])
 	
 	pthread_attr_destroy (&thread_attr);
 	
-	// Wait for threads to finish (don't forget to wait for executioner, hence + 1)
-	for ( i = 0; i < etherpoke_conf->interfaces_count + 2; i++ ){
+	// Bind signal handlers
+	signal (SIGINT, etherpoke_die);
+	signal (SIGTERM, etherpoke_die);
+	signal (SIGQUIT, etherpoke_die);
+	
+	for ( i = 0; i < ETHERPOKE_THREAD_COUNT (etherpoke_conf->interfaces_count); i++ ){
 		th_rc = pthread_join (threads[i], NULL); // maybe we could (should) take a look at the status returned from thread?
 		
 		if ( th_rc != 0 ){
@@ -209,6 +229,7 @@ main (int argc, char *argv[])
 	}
 	
 	free (threads);
+	free (threads_loop_state);
 	free (listener_data);
 	queue_destroy (&packet_queue);
 	conf_destroy (etherpoke_conf);

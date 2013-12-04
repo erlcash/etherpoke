@@ -51,9 +51,9 @@ executioner_main (void *th_data)
 
 	memset (meta_pkt, 0, sizeof (metapkt_t*) * METAPKT_BUFF_LEN);
 	
-	fprintf (stderr, "th_%d: executioner spawned\n", executioner_data->id);
+	fprintf (stderr, "th_%d (executioner): spawned\n", executioner_data->id);
 	
-	for ( ;; ){
+	while ( executioner_data->loop_state ){
 		pthread_mutex_lock (&packet_queue_mut);
 		pthread_cond_wait (&packet_queue_cond, &packet_queue_mut);
 		
@@ -85,6 +85,8 @@ executioner_main (void *th_data)
 		}
 	}
 	
+	fprintf (stderr, "th_%d (executioner): dying\n", executioner_data->id);
+	
 	pthread_exit ((void*) 0);
 }
 
@@ -92,5 +94,6 @@ void
 executioner_set_data (executioner_data_t *data, int thread_id, const conf_t *config)
 {
 	data->id = thread_id;
+	data->loop_state = 1;
 	data->config = config;
 }

@@ -33,6 +33,7 @@
 typedef struct
 {
 	int id;
+	int loop_state;
 	const conf_t *config;
 } executioner_data_t;
 

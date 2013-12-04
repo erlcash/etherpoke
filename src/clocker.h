@@ -29,6 +29,7 @@
 typedef struct
 {
 	int id;
+	int loop_state;
 	const conf_t *config;
 } clocker_data_t;
 
