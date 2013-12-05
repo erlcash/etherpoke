@@ -309,8 +309,7 @@ conf_init (const char *file, char *errbuf)
 	// Load filters
 	conf->filters_count = conf_count_filters (&config);
 	
-	// Fixme: absence of the filters should not be treated as an error
-	if ( conf->filters_count == -1 ){
+	if ( conf->filters_count <= 0 ){
 		snprintf (errbuf, CONF_ERRBUF_SIZE, "no filters specified");
 		config_destroy (&config);
 		conf_destroy (conf);
