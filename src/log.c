@@ -1,5 +1,5 @@
 /*
- * executioner.h
+ * log.c
  * 
  * Copyright 2013 Earl Cash <erl@codeward.org>
  * 
@@ -21,25 +21,30 @@
  * 
  */
 
-#ifndef _EXECUTIONER_H
-#define _EXECUTIONER_H
-
 #include <stdio.h>
-#include "config.h"
+#include "log.h"
 
-// Length of metapkt_t buffer, this represents how many packets is retrieved
-// from the packet queue in every cycle.
-#define METAPKT_BUFF_LEN 2048
-
-typedef struct
+FILE*
+log_open (const char *file)
 {
-	int id;
-	int loop_state;
-	const conf_t *config;
-	FILE *log;
-} executioner_data_t;
+	FILE *fd;
+	
+	fd = fopen (file, "a");
+	
+	if ( fd == NULL )
+		return NULL;
+	
+	if ( setvbuf (fd, NULL, _IOLBF, 0) != 0 ){
+		fclose (fd);
+		return NULL;
+	}
+	
+	return fd;
+}
 
-extern void* executioner_main (void *th_data);
-extern void executioner_set_data (executioner_data_t *data, int thread_id, const conf_t *config, FILE *log);
+int
+log_close (FILE *log_fd)
+{
+	return fclose (log_fd);
+}
 
-#endif

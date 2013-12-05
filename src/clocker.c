@@ -80,14 +80,14 @@ clocker_main (void *th_data)
 	sessions_ref = (session_t*) malloc (sizeof (session_t) * clocker_data->config->filters_count);
 	
 	if ( sessions_ref == NULL ){
-		fprintf (stderr, "th_%d (clocker): cannot allocate memory for the reference session data\n", clocker_data->id);
+		fprintf (clocker_data->log, "th_%d (clocker): cannot allocate memory for the reference session data\n", clocker_data->id);
 		abort ();
 	}
 	
 	// Decide which line apply... too tired right now...
 	memset (sessions_ref, 0, sizeof (session_t) * clocker_data->config->filters_count);
 	
-	fprintf (stderr, "th_%d (clocker): spawned\n", clocker_data->id);
+	fprintf (clocker_data->log, "th_%d (clocker): spawned\n", clocker_data->id);
 	
 	while ( clocker_data->loop_state ){
 		time (&current_time);
@@ -102,14 +102,14 @@ clocker_main (void *th_data)
 				
 				if ( pid == 0 ){
 					if ( clocker_exec (clocker_data->config->filters[i].cmd_session_begin) == EXIT_FAILURE ){
-						fprintf (stderr, "th_%d (clocker): cannot execute event hook '%s': %s\n", clocker_data->id, clocker_data->config->filters[i].cmd_session_begin, "<REASON HERE>");
+						fprintf (clocker_data->log, "th_%d (clocker): cannot execute event hook '%s': %s\n", clocker_data->id, clocker_data->config->filters[i].cmd_session_begin, "<REASON HERE>");
 						exit (EXIT_FAILURE);
 					}
 					exit (EXIT_SUCCESS);
 				}
 				
 				if ( pid == -1 ){
-					fprintf (stderr, "th_%d (clocker): cannot fork myself\n", clocker_data->id);
+					fprintf (clocker_data->log, "th_%d (clocker): cannot fork myself\n", clocker_data->id);
 					abort ();
 				}
 			
@@ -122,14 +122,14 @@ clocker_main (void *th_data)
 				
 				if ( pid == 0 ){
 					if ( clocker_exec (clocker_data->config->filters[i].cmd_session_end) == EXIT_FAILURE ){
-						fprintf (stderr, "th_%d (clocker): cannot execute event hook '%s': %s\n", clocker_data->id, clocker_data->config->filters[i].cmd_session_end, "<REASON HERE>");
+						fprintf (clocker_data->log, "th_%d (clocker): cannot execute event hook '%s': %s\n", clocker_data->id, clocker_data->config->filters[i].cmd_session_end, "<REASON HERE>");
 						exit (EXIT_FAILURE);
 					}
 					exit (EXIT_SUCCESS);
 				}
 				
 				if ( pid == -1 ){
-					fprintf (stderr, "th_%d (clocker): cannot fork myself\n", clocker_data->id);
+					fprintf (clocker_data->log, "th_%d (clocker): cannot fork myself\n", clocker_data->id);
 					abort ();
 				}
 			}
@@ -140,7 +140,7 @@ clocker_main (void *th_data)
 		sleep (1);
 	}
 	
-	fprintf (stderr, "th_%d (clocker): dying...\n", clocker_data->id);
+	fprintf (clocker_data->log, "th_%d (clocker): dying...\n", clocker_data->id);
 	
 	free (sessions_ref);
 	
@@ -148,9 +148,10 @@ clocker_main (void *th_data)
 }
 
 void
-clocker_set_data (clocker_data_t *data, int thread_id, const conf_t *config)
+clocker_set_data (clocker_data_t *data, int thread_id, const conf_t *config, FILE *log)
 {
 	data->id = thread_id;
 	data->loop_state = 1;
 	data->config = config;
+	data->log = log;
 }

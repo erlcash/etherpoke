@@ -99,32 +99,33 @@ listener_main (void *th_data)
 	pcap_handle = pcap_open_live (listener_data->interface, SNAPSHOT_LENGTH, 1, 1000, errbuf);
 	
 	if ( pcap_handle == NULL ){
-		fprintf (stderr, "th_%d (listener): cannot open device %s\n", listener_data->id, errbuf);
+		fprintf (listener_data->log, "th_%d (listener): cannot open device %s\n", listener_data->id, errbuf);
 		pthread_exit ((void*) EXIT_FAILURE);
 	}
 	
 	bpf_program_str = listener_bpf_prog_init (listener_data->config->filters, listener_data->config->filters_count);
 	
 	if ( bpf_program_str == NULL ){
-		fprintf (stderr, "th_%d (listener): cannot initialize bpf program\n", listener_data->id);
+		fprintf (listener_data->log, "th_%d (listener): cannot initialize bpf program\n", listener_data->id);
 		abort (); // die! we are probably without memory.
 	}
 	
-	fprintf (stderr, "th_%d (listener): bpf_prog %s\n", listener_data->id, bpf_program_str);
+	fprintf (listener_data->log, "th_%d (listener): bpf_prog %s\n", listener_data->id, bpf_program_str);
 	
+	// FIXME: use mutex before bpf compilation!
 	if ( pcap_compile (pcap_handle, &bpf_prog, bpf_program_str, 0, PCAP_NETMASK_UNKNOWN) == -1 ){
-		fprintf (stderr, "th_%d (listener): cannot compile a bpf program\n", listener_data->id);
-		abort ();
+		fprintf (listener_data->log, "th_%d (listener): cannot compile a bpf program\n", listener_data->id);
+		pthread_exit ((void*) EXIT_FAILURE);
 	}
 	
 	listener_bpf_prog_destroy (bpf_program_str);
 	
 	if ( pcap_setfilter (pcap_handle, &bpf_prog) == -1 ){
-		fprintf (stderr, "th_%d (listener): cannot apply bpf program\n", listener_data->id);
-		abort ();
+		fprintf (listener_data->log, "th_%d (listener): cannot apply bpf program\n", listener_data->id);
+		pthread_exit ((void*) EXIT_FAILURE);
 	}
 	
-	fprintf (stderr, "th_%d (listener): spawned (%s)\n", listener_data->id, listener_data->interface);
+	fprintf (listener_data->log, "th_%d (listener): spawned (%s)\n", listener_data->id, listener_data->interface);
 	
 	while ( listener_data->loop_state ){
 		pkt = pcap_next (pcap_handle, &pkt_header);
@@ -138,20 +139,20 @@ listener_main (void *th_data)
 		meta_pkt = metapkt_init (eth_header->h_source, pkt_header.ts.tv_sec);
 	
 		if ( meta_pkt == NULL ){
-			fprintf (stderr, "th_%d (listener): cannot allocate memory for meta packet\n", listener_data->id);
+			fprintf (listener_data->log, "th_%d (listener): cannot allocate memory for meta packet\n", listener_data->id);
 			abort ();
 		}
 		
 		pthread_mutex_lock (&packet_queue_mut);
 		if ( queue_enqueue (&packet_queue, (void*) meta_pkt) == NULL ){
-			fprintf (stderr, "th_%d (listener): cannot enqueue packet\n", listener_data->id);
+			fprintf (listener_data->log, "th_%d (listener): cannot enqueue packet\n", listener_data->id);
 			pthread_exit ((void*) EXIT_FAILURE);
 		}
 		pthread_cond_signal (&packet_queue_cond); // signal executioner
 		pthread_mutex_unlock (&packet_queue_mut);
 	}
 	
-	fprintf (stderr, "th_%d (listener): dying...\n", listener_data->id);
+	fprintf (listener_data->log, "th_%d (listener): dying...\n", listener_data->id);
 	
 	pcap_close (pcap_handle);
 	
@@ -159,10 +160,11 @@ listener_main (void *th_data)
 }
 
 void
-listener_set_data (listener_data_t *data, int thread_id, const conf_t *config, const char *interface)
+listener_set_data (listener_data_t *data, int thread_id, const conf_t *config, FILE *log, const char *interface)
 {
 	data->id = thread_id;
 	data->loop_state = 1;
 	data->config = config;
+	data->log = log;
 	data->interface = interface;
 }

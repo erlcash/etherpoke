@@ -24,6 +24,7 @@
 #ifndef _LISTENER_H
 #define _LISTENER_H
 
+#include <stdio.h>
 #include "config.h"
 
 #define SNAPSHOT_LENGTH 65535
@@ -42,9 +43,10 @@ typedef struct
 	int loop_state;
 	const char *interface;
 	const conf_t *config;
+	FILE *log;
 } listener_data_t;
 
 extern void* listener_main (void *th_data);
-extern void listener_set_data (listener_data_t *data, int thread_id, const conf_t *config, const char *interface);
+extern void listener_set_data (listener_data_t *data, int thread_id, const conf_t *config, FILE *log, const char *interface);
 
 #endif

@@ -24,6 +24,7 @@
 #ifndef _CLOCKER_H
 #define _CLOCKER_H
 
+#include <stdio.h>
 #include "config.h"
 
 typedef struct
@@ -31,9 +32,10 @@ typedef struct
 	int id;
 	int loop_state;
 	const conf_t *config;
+	FILE *log;
 } clocker_data_t;
 
 extern void* clocker_main (void *th_data);
-extern void clocker_set_data (clocker_data_t *data, int thread_id, const conf_t *config);
+extern void clocker_set_data (clocker_data_t *data, int thread_id, const conf_t *config, FILE *log);
 
 #endif

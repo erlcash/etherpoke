@@ -35,6 +35,7 @@
 #include "etherpoke.h"
 #include "queue.h"
 #include "session.h"
+#include "log.h"
 
 #include "listener.h"
 #include "executioner.h"
@@ -56,10 +57,11 @@ static void
 etherpoke_help (const char *p)
 {
 	fprintf (stdout, "%s v%s\n\nUsage:\n"
-					 "  %s [-dhv] -c <FILE>\n\n"
+					 "  %s [-dfhv] -c <FILE>\n\n"
 					 "Options:\n"
 					 "  -c <FILE>\tconfiguration file\n"
 					 "  -d\t\trun as a daemon\n"
+					 "  -f <FILE>\twrite output to specified file instead of stderr\n"
 					 "  -h\t\tshow this help text\n"
 					 "  -v\t\tshow version information\n"
 					 , p, ETHERPOKE_VER, p);
@@ -92,25 +94,37 @@ main (int argc, char *argv[])
 	listener_data_t *listener_data;
 	executioner_data_t executioner_data;
 	clocker_data_t clocker_data;
-	char *config_file, conf_errbuf[CONF_ERRBUF_SIZE];
-	pid_t pid;
+	char *config_file, *log_file, conf_errbuf[CONF_ERRBUF_SIZE];
 	int i, c, th_rc, daemonize = 0;
+	FILE *log_fd;
+	pid_t pid;
 	
 	config_file = NULL;
+	log_file = NULL;
+	log_fd = stderr;
 	
-	while ( (c = getopt (argc, argv, "c:dhv")) != -1 ){
+	while ( (c = getopt (argc, argv, "c:df:hv")) != -1 ){
 		switch (c){
 			case 'c':
 				config_file = strdup (optarg);
 				
 				if ( config_file == NULL ){
 					fprintf (stderr, "%s: cannot allocate memory for configuration file\n", argv[0]);
-					abort ();
+					exit (EXIT_FAILURE);
 				}
 				break;
 			
 			case 'd':
 				daemonize = 1;
+				break;
+			
+			case 'f':
+				log_file = strdup (optarg);
+				
+				if ( log_file == NULL ){
+					fprintf (stderr, "%s: cannot allocate memory for log file\n", argv[0]);
+					exit (EXIT_FAILURE);
+				}
 				break;
 			
 			case 'h':
@@ -123,7 +137,9 @@ main (int argc, char *argv[])
 				exit (EXIT_SUCCESS);
 				break;
 			
-			case '?':
+			default:
+				etherpoke_help (argv[0]);
+				exit (EXIT_FAILURE);
 				break;
 		}
 	}
@@ -182,6 +198,19 @@ main (int argc, char *argv[])
 		exit (EXIT_FAILURE);
 	}
 	
+	// Attempt to open specified file for writing
+	if ( log_file != NULL ){
+		log_fd = log_open (log_file);
+		
+		if ( log_fd == NULL ){
+			fprintf (stderr, "%s: cannot open log file '%s'.\n", argv[0], log_file);
+			exit (EXIT_FAILURE);
+		}
+		
+		// Free memory used by log's filename
+		free (log_file);
+	}
+	
 	// Daemonize the process if the flag was set
 	if ( daemonize == 1 ){
 		pid = fork ();
@@ -207,7 +236,7 @@ main (int argc, char *argv[])
 	
 	// Spawn listeners
 	for ( i = 0; i < etherpoke_conf->interfaces_count; i++ ){
-		listener_set_data (&(listener_data[i]), i, (const conf_t*) etherpoke_conf, (const char*) etherpoke_conf->interfaces[i]);	
+		listener_set_data (&(listener_data[i]), i, (const conf_t*) etherpoke_conf, log_fd, (const char*) etherpoke_conf->interfaces[i]);	
 		threads_loop_state[i] = &(listener_data[i].loop_state);
 		th_rc = pthread_create (&(threads[i]), &thread_attr, listener_main, (void*) &(listener_data[i]));
 		
@@ -218,7 +247,7 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn executioner
-	executioner_set_data (&executioner_data, etherpoke_conf->interfaces_count, (const conf_t*) etherpoke_conf);
+	executioner_set_data (&executioner_data, etherpoke_conf->interfaces_count, (const conf_t*) etherpoke_conf, log_fd);
 	threads_loop_state[etherpoke_conf->interfaces_count] = &(executioner_data.loop_state);
 	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count]), &thread_attr, executioner_main, (void*) &executioner_data);
 	
@@ -228,7 +257,7 @@ main (int argc, char *argv[])
 	}
 	
 	// Spawn clocker
-	clocker_set_data (&clocker_data, etherpoke_conf->interfaces_count + 1, (const conf_t*) etherpoke_conf);
+	clocker_set_data (&clocker_data, etherpoke_conf->interfaces_count + 1, (const conf_t*) etherpoke_conf, log_fd);
 	threads_loop_state[etherpoke_conf->interfaces_count + 1] = &(clocker_data.loop_state);
 	th_rc = pthread_create (&(threads[etherpoke_conf->interfaces_count + 1]), &thread_attr, clocker_main, (void*) &clocker_data);
 	
@@ -259,6 +288,9 @@ main (int argc, char *argv[])
 	queue_destroy (&packet_queue);
 	conf_destroy (etherpoke_conf);
 	free (config_file);
+	
+	if ( log_fd != stderr )
+		log_close (log_fd);
 	
 	pthread_exit (NULL);
 }
