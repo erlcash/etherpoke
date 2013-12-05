@@ -35,6 +35,8 @@ extern queue_t packet_queue;
 extern pthread_mutex_t packet_queue_mut;
 extern pthread_cond_t packet_queue_cond;
 
+pthread_mutex_t listener_bpf_mut = PTHREAD_MUTEX_INITIALIZER;
+
 /*
  * Allocate and populate a buffer with bpf program.
  */
@@ -93,6 +95,7 @@ listener_main (void *th_data)
 	const u_char *pkt = NULL;
 	struct ethhdr *eth_header;
 	metapkt_t *meta_pkt;
+	int bpf_res;
 	
 	listener_data = (listener_data_t*) th_data;
 	
@@ -113,7 +116,11 @@ listener_main (void *th_data)
 	fprintf (listener_data->log, "th_%d (listener): bpf_prog %s\n", listener_data->id, bpf_program_str);
 	
 	// FIXME: use mutex before bpf compilation!
-	if ( pcap_compile (pcap_handle, &bpf_prog, bpf_program_str, 0, PCAP_NETMASK_UNKNOWN) == -1 ){
+	pthread_mutex_lock (&listener_bpf_mut);
+	bpf_res = pcap_compile (pcap_handle, &bpf_prog, bpf_program_str, 0, PCAP_NETMASK_UNKNOWN);
+	pthread_mutex_unlock (&listener_bpf_mut);
+	
+	if ( bpf_res == -1 ){
 		fprintf (listener_data->log, "th_%d (listener): cannot compile a bpf program\n", listener_data->id);
 		pthread_exit ((void*) EXIT_FAILURE);
 	}
