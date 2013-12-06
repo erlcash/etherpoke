@@ -1,27 +1,25 @@
 1. Description
-etherpoke is a daemon listening on network interface/s monitoring a session of
-devices connected to network.
+etherpoke is a daemon listening on network interface/s monitoring
+a session of specified device/s connected to network.
 
-A list of monitored devices is available in the configuration file.
-Each filter contains an Ethernet address of the device, a pair of event hooks
-and session timeout.
+etherpoke defines two events: SESSION_BEGIN, SESSION_END to which
+a hook (system command) can be set. The event hook can be any program
+installed in the system.
 
-etherpoke defines two events: SESSION_BEGIN, SESSION_END.
+The events are triggered as following:
+SESSION_BEGIN is triggered when the first packet, with Ethernet source
+address matching the filter, is captured.
+SESSION_END is triggered when the time, since the last captured packet
+with Ethernet source address matching the filter, exceeds session_timeout.
 
-Event SESSION_BEGIN is triggered when the first packet, with source address
-matching the filter, is captured.
-Event SESSION_END is triggered after the time, since the last captured packet
-, with source address matching the filter, exceeds session_timeout.
-
-The value of the event hook can be any program available in the system.
-The program is executed by /bin/sh.
-
-Data retrieved and manipulated by etherpoke are Ethernet source address and packet's capture
-timestamp.
+etherpoke is a free software licensed under GNU GPL3.
 
 2. Installation
-
-** THIS SECTION SHOULD BE UPDATED **
+Extract the content of the archive.
+Change current directory to extracted directory.
+Run ./autogen.sh
+Run ./configure
+Run make && sudo make install.
 
 I do not recommend using the software, yet. It's still work in progress with
 plenty of bugs and design issues (possibly). Automake is not working. If you are
@@ -70,4 +68,19 @@ filters:{
 - libconfig (version **find.out**)
 
 5. Applications
-** THIS SECTION SHOULD BE UPDATED **
+The main initiative behind etherpoke is to carry out tasks automatically when a device
+(presumably a mobile one) becomes present in WLAN (Wireless Local Area Network). The mobile
+device connected to network can be think of as a user's shadow projected in cyberspace, it
+opens new possibilities for applications.
+
+etherpoke IS NOT a user application but rather a utility, a building block if you will,
+which ought to be used in conjuction with other tools by system administrator. There is
+a preliminary expectation to understand workings of computer networks in order to deploy
+etherpoke. If you plan to install etherpoke on your workstation, you probably won't get
+results you expect, that is to capture packets of other devices in network. The setup
+depends on architecture of your network and control devices involved (switch vs hub).
+
+etherpoke ought to be installed on router/switch/hub.
+
+My future plans involve porting etherpoke on other platforms (namely ARM), a package
+for OpenWrt and plugin for LuCi - web based configuration interface for embedded devices.
