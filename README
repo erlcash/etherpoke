@@ -1,3 +1,5 @@
+Homepage: http://codeward.org/etherpoke
+
 1. Description
 etherpoke is a daemon listening on network interface/s monitoring
 a session of specified device/s connected to network.
