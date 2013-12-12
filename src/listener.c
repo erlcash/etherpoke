@@ -115,7 +115,6 @@ listener_main (void *th_data)
 	
 	fprintf (listener_data->log, "th_%d (listener): bpf_prog %s\n", listener_data->id, bpf_program_str);
 	
-	// FIXME: use mutex before bpf compilation!
 	pthread_mutex_lock (&listener_bpf_mut);
 	bpf_res = pcap_compile (pcap_handle, &bpf_prog, bpf_program_str, 0, PCAP_NETMASK_UNKNOWN);
 	pthread_mutex_unlock (&listener_bpf_mut);
@@ -131,6 +130,8 @@ listener_main (void *th_data)
 		fprintf (listener_data->log, "th_%d (listener): cannot apply bpf program\n", listener_data->id);
 		pthread_exit ((void*) EXIT_FAILURE);
 	}
+	
+	pcap_freecode (&bpf_prog);
 	
 	fprintf (listener_data->log, "th_%d (listener): spawned (%s)\n", listener_data->id, listener_data->interface);
 	
