@@ -85,6 +85,10 @@ executioner_main (void *th_data)
 		}
 	}
 	
+	// Free metapackets left over in queue
+	while ( (*meta_pkt = (metapkt_t*) queue_dequeue (&packet_queue)) != NULL )
+		free (*meta_pkt);
+	
 	pthread_exit ((void*) 0);
 }
 
