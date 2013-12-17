@@ -1,86 +1,95 @@
 Homepage: http://codeward.org/etherpoke
 
-1. Description
-etherpoke is a daemon listening on network interface/s monitoring
-a session of specified device/s connected to network.
+Description
 
-etherpoke defines two events: SESSION_BEGIN, SESSION_END to which
-a hook (system command) can be set. The event hook can be any program
-installed in the system.
+etherpoke is a network session monitor.
+
+etherpoke defines two events: SESSION_BEGIN, SESSION_END to which a hook (system command) can be set. The event hook can be any program installed in the system.
 
 The events are triggered as following:
-SESSION_BEGIN is triggered when the first packet, with Ethernet source
-address matching the filter, is captured.
-SESSION_END is triggered when the time, since the last captured packet
-with Ethernet source address matching the filter, exceeds session_timeout.
+SESSION_BEGIN is triggered when the first packet, with Ethernet source address matching the filter, is captured.
+SESSION_END is triggered when the time, since the last captured packet with Ethernet source address matching the filter, exceeds session timeout.
 
 etherpoke is a free software licensed under GNU GPL3.
+Installation
 
-2. Installation
-Extract the content of the archive.
-Change current directory to extracted directory.
-Run make && sudo make install.
+If etherpoke is not available in the repository of your favorite GNU/Linux distribution, you may consider installing etherpoke from the source.
 
-I do not recommend using the software, yet. It's still work in progress with
-plenty of bugs and design issues (possibly). Automake is not working. If you are
-a lazy developer, use:
+Installing from the source:
 
-gcc *.c -o etherpoke -ggdb -Wall -lpcap -lpthread -lconfig
+    Download the source code.
+    Extract the content of the archive.
+    Change current directory to extracted directory.
+    Run make && sudo make install
 
-If you are a lazy developer who can't stand using the command, fix it and submit
-the changes! I would certainly appreciate it.
 
-3. Configuration
-This is an example of configuration file:
+Dependencies:
+
+    glibc >= 2.0
+    libpcap >= 0.8
+    libpthread >= **find.out**
+    libconfig >= **find.out**
+
+Configuration
+
+etherpoke uses libconfig for parsing the configuration file.
+
+This is an example:
 
 common:{
 	# Listen on these interfaces
-	interfaces = ( "wlan0", "eth0", "eth1", "eth2" );
-	
-	# How long to wait in seconds before the session expires triggering the event SESSION_END
-	# Deprecated, session_timeout is specified separately for each device (filter).
-	session_timeout = 1800;
+	interfaces = ( "wlan0", "wlan1" );	
 };
 
 filters:{
-	# Filter name (use anything relevant)
-	b2x2_wifi: {
+	john_cellphone: {
 		mac_addr = "1c:4b:d6:ed:80:60";
-		session_begin = "echo 'hello world' >> /tmp/b2x2_wifi.out";
-		session_end = "echo 'goodbye world' >> /tmp/b2x2_wifi.out";
-		session_timeout = 60; # seconds
+		session_begin = "/usr/bin/flite -voice awb 'Welcome back, John.'";
+		session_end = "/usr/bin/flite -voice awb 'John is gone.'";
+		session_timeout = 3600; # seconds
 	};
 	
-	my_phone: {
+	michael_cellphone: {
 		mac_addr = "20:cf:30:49:4d:30";
-		session_begin = "echo 'hello world' >> /tmp/my_phone.out";
-		session_end = "echo 'goodbye world' >> /tmp/my_phone.out";
-		session_timeout = 25; # seconds
+		session_begin = "/usr/bin/flite -voice awb 'Welcome back, Michael.'";
+		session_end = "/usr/bin/flite -voice awb 'Michael is gone.'";
+		session_timeout = 3600; # seconds
 	};
-	
-	# Other filters...
-};
+};				
 
-4. Dependencies
-- glibc (version **find.out**)
-- libpcap (version **find.out**)
-- libpthread (version **find.out**)
-- libconfig (version **find.out**)
+The configuration file should be self-explaining.
 
-5. Applications
-The main initiative behind etherpoke is to carry out tasks automatically when a device
-(presumably a mobile one) becomes present in WLAN (Wireless Local Area Network). The mobile
-device connected to network can be think of as a user's shadow projected in cyberspace, it
-opens new possibilities for applications.
+etherpoke listens on two network interfaces (wlan0 and wlan1) and monitors a session of John's and Michael's cellphone.
 
-etherpoke IS NOT a user application but rather a utility, a building block if you will,
-which ought to be used in conjuction with other tools by system administrator. There is
-a preliminary expectation to understand workings of computer networks in order to deploy
-etherpoke. If you plan to install etherpoke on your workstation, you probably won't get
-results you expect, that is to capture packets of other devices in network. The setup
-depends on architecture of your network and control devices involved (switch vs hub).
+When John's or Michael's cellphone becomes connected to WLAN, etherpoke will greet them with computer synthesized voice saying 'Welcome back, John/Michael.'.
+
+If the device becomes inactive (or disconnected from network) for period longer than one hour (3600 seconds), etherpoke will be heard stating that John or Michael is gone.
+Usage
+
+etherpoke [-dfhv] -c <FILE>
+
+Options:
+  -c <FILE>	configuration file
+  -d		run as a daemon
+  -f <FILE>	write output to specified file instead of stderr
+  -h		show this help text
+  -v		show version information
+
+Applications
+
+The main initiative behind etherpoke is to carry out tasks automatically when a device (presumably a mobile one) becomes present in WLAN (Wireless Local Area Network). The mobile device connected to network can be think of as a user's shadow projected in cyberspace, it opens new possibilities for applications.
+
+etherpoke IS NOT a user application but rather a utility, a building block if you will, which ought to be used in conjuction with other tools by system administrator. There is a preliminary expectation to understand workings of computer networks in order to deploy etherpoke. If you plan to install etherpoke on your workstation, you probably won't get results you expect, that is to capture packets of other devices in network. The setup depends on architecture of your network and control devices involved (switch vs hub).
 
 etherpoke ought to be installed on router/switch/hub.
 
-My future plans involve porting etherpoke on other platforms (namely ARM), a package
-for OpenWrt and plugin for LuCi - web based configuration interface for embedded devices.
+My future plans involve porting etherpoke on other platforms (namely ARM), a package for OpenWrt and plugin for LuCi - web based configuration interface for embedded devices.
+Download
+
+Latest changes are always available in etherpoke's repository hosted on BitBucket.org.
+
+Contact
+
+If you have a hard time configuring or running etherpoke you can contact me via etherpoke@codeward.org.
+
+Please, if you think you have found a bug, consider creating an issue rather than writting me an email about it.
