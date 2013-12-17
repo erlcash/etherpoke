@@ -97,6 +97,8 @@ clocker_main (void *th_data)
 				sessions_ref[i].ts = sessions[i].ts;
 				
 				// Trigger event SESSION_BEGIN
+				fprintf (clocker_data->log, "th_%d (clocker): SESSION_BEGIN triggered for filter '%s'\n", clocker_data->id, clocker_data->config->filters[i].name);
+				
 				// FIXME: replace exit with pthread_exit (is it valid?)
 				pid = fork ();
 				
@@ -118,6 +120,9 @@ clocker_main (void *th_data)
 				sessions_ref[i].ts = 0;
 				
 				// Trigger event SESSION_END
+				fprintf (clocker_data->log, "th_%d (clocker): SESSION_END triggered for filter '%s'\n", clocker_data->id, clocker_data->config->filters[i].name);
+				
+				// FIXME: replace exit with pthread_exit (is it valid?)
 				pid = fork ();
 				
 				if ( pid == 0 ){
@@ -139,8 +144,6 @@ clocker_main (void *th_data)
 		
 		sleep (1);
 	}
-	
-	fprintf (clocker_data->log, "th_%d (clocker): dying...\n", clocker_data->id);
 	
 	free (sessions_ref);
 	

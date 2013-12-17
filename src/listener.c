@@ -160,8 +160,6 @@ listener_main (void *th_data)
 		pthread_mutex_unlock (&packet_queue_mut);
 	}
 	
-	fprintf (listener_data->log, "th_%d (listener): dying...\n", listener_data->id);
-	
 	pcap_close (pcap_handle);
 	
 	pthread_exit ((void*) EXIT_SUCCESS);

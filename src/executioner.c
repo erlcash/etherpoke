@@ -85,8 +85,6 @@ executioner_main (void *th_data)
 		}
 	}
 	
-	fprintf (executioner_data->log, "th_%d (executioner): dying\n", executioner_data->id);
-	
 	pthread_exit ((void*) 0);
 }
 

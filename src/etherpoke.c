@@ -244,6 +244,8 @@ main (int argc, char *argv[])
 			fprintf (stderr, "%s: cannot spawn listener thread\n", argv[0]);
 			exit (EXIT_FAILURE);
 		}
+		
+		fprintf (stderr, "%s: th_%d created\n", argv[0], i);
 	}
 	
 	// Spawn executioner
@@ -256,6 +258,8 @@ main (int argc, char *argv[])
 		exit (EXIT_FAILURE);
 	}
 	
+	fprintf (stderr, "%s: th_%d created\n", argv[0], etherpoke_conf->interfaces_count);
+	
 	// Spawn clocker
 	clocker_set_data (&clocker_data, etherpoke_conf->interfaces_count + 1, (const conf_t*) etherpoke_conf, log_fd);
 	threads_loop_state[etherpoke_conf->interfaces_count + 1] = &(clocker_data.loop_state);
@@ -265,6 +269,8 @@ main (int argc, char *argv[])
 		fprintf (stderr, "%s: cannot spawn clocker thread\n", argv[0]);
 		exit (EXIT_FAILURE);
 	}
+	
+	fprintf (stderr, "%s: th_%d created\n", argv[0], etherpoke_conf->interfaces_count + 1);
 	
 	pthread_attr_destroy (&thread_attr);
 	
@@ -280,6 +286,8 @@ main (int argc, char *argv[])
 			fprintf (stderr, "%s: cannot join with the threads\n", argv[0]);
 			exit (EXIT_FAILURE);
 		}
+		
+		fprintf (stderr, "%s: th_%d exited\n", argv[0], i);
 	}
 	
 	free (threads);

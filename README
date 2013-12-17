@@ -11,6 +11,7 @@ SESSION_BEGIN is triggered when the first packet, with Ethernet source address m
 SESSION_END is triggered when the time, since the last captured packet with Ethernet source address matching the filter, exceeds session timeout.
 
 etherpoke is a free software licensed under GNU GPL3.
+
 Installation
 
 If etherpoke is not available in the repository of your favorite GNU/Linux distribution, you may consider installing etherpoke from the source.
@@ -64,6 +65,7 @@ etherpoke listens on two network interfaces (wlan0 and wlan1) and monitors a ses
 When John's or Michael's cellphone becomes connected to WLAN, etherpoke will greet them with computer synthesized voice saying 'Welcome back, John/Michael.'.
 
 If the device becomes inactive (or disconnected from network) for period longer than one hour (3600 seconds), etherpoke will be heard stating that John or Michael is gone.
+
 Usage
 
 etherpoke [-dfhv] -c <FILE>
