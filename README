@@ -19,8 +19,6 @@ etherpoke is a free software licensed under GNU GPL3.
 2. Installation
 Extract the content of the archive.
 Change current directory to extracted directory.
-Run ./autogen.sh
-Run ./configure
 Run make && sudo make install.
 
 I do not recommend using the software, yet. It's still work in progress with
