@@ -2,15 +2,15 @@ Homepage: http://codeward.org/etherpoke
 
 Description
 
-etherpoke is a network session monitor.
+etherpoke is a scriptable network session monitor.
 
-etherpoke defines two events: SESSION_BEGIN, SESSION_END to which a hook (system command) can be set. The event hook can be any program installed in the system.
+etherpoke defines two events: SESSION_BEGIN, SESSION_END to which a hook (system command) can be assigned. The event hook can be any program installed in the system.
 
 The events are triggered as following:
-SESSION_BEGIN is triggered when the first packet, with Ethernet source address matching the filter, is captured.
-SESSION_END is triggered when the time, since the last captured packet with Ethernet source address matching the filter, exceeds session timeout.
+SESSION_BEGIN is triggered when the first packet, with Ethernet source address matching the filter is captured.
+SESSION_END is triggered when the time, since the last captured packet with Ethernet source address matching the filter exceeds session timeout.
 
-etherpoke is a free software licensed under GNU GPL3.
+etherpoke is a free software licensed under GNU GPL3. 
 
 Installation
 
