@@ -99,7 +99,7 @@ listener_main (void *th_data)
 	
 	listener_data = (listener_data_t*) th_data;
 	
-	pcap_handle = pcap_open_live (listener_data->interface, SNAPSHOT_LENGTH, 1, 1000, errbuf);
+	pcap_handle = pcap_open_live (listener_data->interface, LISTENER_SNAPSHOT_LENGTH, 1, LISTENER_READ_TIMEOUT, errbuf);
 	
 	if ( pcap_handle == NULL ){
 		fprintf (listener_data->log, "th_%d (listener): cannot open device %s\n", listener_data->id, errbuf);

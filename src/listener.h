@@ -27,7 +27,8 @@
 #include <stdio.h>
 #include "config.h"
 
-#define SNAPSHOT_LENGTH 65535
+#define LISTENER_READ_TIMEOUT 1000
+#define LISTENER_SNAPSHOT_LENGTH 1500
 
 // Length of expanded bpf template
 #define LISTENER_BPF_TEMPL_LEN 34
