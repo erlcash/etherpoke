@@ -293,6 +293,7 @@ main (int argc, char *argv[])
 	free (threads);
 	free (threads_loop_state);
 	free (listener_data);
+	free (sessions);
 	queue_destroy (&packet_queue);
 	conf_destroy (etherpoke_conf);
 	free (config_file);

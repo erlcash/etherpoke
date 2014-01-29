@@ -34,30 +34,24 @@ filter_set_name (filter_t *filter, const char *name)
 	if ( filter->name != NULL )
 		free (filter->name);
 	
-	filter->name = (char*) malloc (sizeof (char) * strlen (name) + 1);
+	filter->name = strdup (name);
 	
 	if ( filter->name == NULL )
 		return 1;
-	
-	strncpy (filter->name, name, strlen (name));
-	filter->name[strlen (name)] = '\0';
 	
 	return 0;
 }
 
 static int
 filter_set_ethaddr (filter_t *filter, const char *eth_addr)
-{	
+{
 	if ( filter->eth_addr != NULL )
 		free (filter->eth_addr);
 	
-	filter->eth_addr = (char*) malloc (sizeof (char) * strlen (eth_addr) + 1);
+	filter->eth_addr = strdup (eth_addr);
 	
 	if ( filter->eth_addr == NULL )
 		return 1;
-	
-	strncpy (filter->eth_addr, eth_addr, strlen (eth_addr));
-	filter->eth_addr[strlen (eth_addr)] = '\0';
 	
 	// Convert string representation to the 6 byte representation
 	sscanf (filter->eth_addr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &(filter->eth_addr_bin[0]), &(filter->eth_addr_bin[1]),
@@ -86,13 +80,10 @@ filter_set_event (filter_t *filter, const char *cmd, int type)
 	if ( *event_type != NULL )
 		free (*event_type);
 	
-	*event_type = (char*) malloc (sizeof (char) * strlen (cmd) + 1);
+	*event_type = strdup (cmd);
 	
 	if ( *event_type == NULL )
 		return 1;
-	
-	strncpy (*event_type, cmd, strlen (cmd));
-	*((*event_type) + strlen (cmd)) = '\0';
 	
 	return 0;
 }
@@ -116,9 +107,6 @@ filter_destroy (filter_t *filter)
 		free (filter->cmd_session_begin);
 	if ( filter->cmd_session_end != NULL )
 		free (filter->cmd_session_end);
-	
-	free (filter);
-	filter = NULL;
 }
 
 static int
@@ -352,6 +340,7 @@ conf_destroy (conf_t *conf)
 	for ( i = 0; i < conf->filters_count; i++ )
 		filter_destroy (&(conf->filters[i]));
 	
+	free (conf->filters);
 	free (conf);
 	conf = NULL;
 }
