@@ -4,8 +4,11 @@ INSTALLDIR = /usr/local/bin
 
 all: $(BINDIR)/$(NAME)
 
-$(BINDIR)/$(NAME): clocker.o config.o executioner.o listener.o log.o metapkt.o queue.o session.o
+$(BINDIR)/$(NAME): etherpoke.o clocker.o config.o executioner.o listener.o log.o metapkt.o queue.o session.o
 	gcc *.c -o $(BINDIR)/$(NAME) -ggdb -lpcap -lpthread -lconfig
+
+etherpoke.o: etherpoke.c
+	gcc -c etherpoke.c
 
 clocker.o: clocker.c
 	gcc -c clocker.c

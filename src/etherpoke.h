@@ -24,7 +24,7 @@
 #ifndef _ETHERPOKE_H
 #define _ETHERPOKE_H
 
-#define ETHERPOKE_VER "0.1"
+#define ETHERPOKE_VER "1.0"
 #define ETHERPOKE_THREAD_COUNT(interfaces_count) ((interfaces_count) + 1 + 1)
 
 #endif
