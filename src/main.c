@@ -28,6 +28,7 @@
 #include <libconfig.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <getopt.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -303,3 +304,4 @@ main (int argc, char *argv[])
 	
 	pthread_exit (NULL);
 }
+

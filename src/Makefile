@@ -1,42 +1,46 @@
+CC = gcc
+CFLAGS = -O2 -std=gnu99 -pedantic -ggdb
+
 NAME = etherpoke
-BINDIR = ../bin
-INSTALLDIR = /usr/local/bin
+INSTALL_DIR = /usr/local/bin
 
-all: $(BINDIR)/$(NAME)
+.PHONY: clean install
 
-$(BINDIR)/$(NAME): etherpoke.o clocker.o config.o executioner.o listener.o log.o metapkt.o queue.o session.o
-	gcc *.c -o $(BINDIR)/$(NAME) -ggdb -lpcap -lpthread -lconfig
+all: $(NAME)
 
-etherpoke.o: etherpoke.c
-	gcc -c etherpoke.c
+$(NAME): main.o clocker.o config.o executioner.o listener.o log.o metapkt.o queue.o session.o
+	$(CC) $(CFLAGS) $^ -o $(NAME) -lpcap -lpthread -lconfig
+
+main.o: main.c
+	$(CC) $(CFLAGS) -c main.c
 
 clocker.o: clocker.c
-	gcc -c clocker.c
+	$(CC) $(CFLAGS) -c clocker.c
 
 config.o: config.c
-	gcc -c config.c
+	$(CC) $(CFLAGS) -c config.c
 
 executioner.o: executioner.c
-	gcc -c executioner.c
+	$(CC) $(CFLAGS) -c executioner.c
 
 listener.o: listener.c
-	gcc -c listener.c
+	$(CC) $(CFLAGS) -c listener.c
 
 log.o: log.c
-	gcc -c log.c
+	$(CC) $(CFLAGS) -c log.c
 
 metapkt.o: metapkt.c
-	gcc -c metapkt.c
+	$(CC) $(CFLAGS) -c metapkt.c
 
 queue.o: queue.c
-	gcc -c queue.c
+	$(CC) $(CFLAGS) -c queue.c
 
 session.o: session.c
-	gcc -c session.c
+	$(CC) $(CFLAGS) -c session.c
 
-install: $(BINDIR)/$(NAME)
-	install -m 755 $(BINDIR)/$(NAME) $(INSTALLDIR)
+install: $(NAME)
+	install -m 755 $(NAME) $(INSTALL_DIR)
 
 clean:
-	rm -f $(BINDIR)/$(NAME)
-	rm -f *.o
+	rm -f *.o $(NAME)
+
