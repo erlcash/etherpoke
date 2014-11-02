@@ -42,17 +42,35 @@ etherpoke_version (const char *p)
 	fprintf (stdout, "%s v%s\n", p, ETHERPOKE_VER);
 }
 
+static void
+etherpoke_sigdie (int signo)
+{
+	main_loop = 0;
+}
+
 int
 main (int argc, char *argv[])
 {
 	pcap_t **pcap_handle;
 	struct config *etherpoke_conf;
-	char *config_file, conf_errbuff[CONF_ERRBUF_SIZE], pcap_errbuff[PCAP_ERRBUF_SIZE];
+	char conf_errbuff[CONF_ERRBUF_SIZE],
+			pcap_errbuff[PCAP_ERRBUF_SIZE],
+			*config_file;
 	struct session_data *pcap_session;
+	struct sigaction sa;
 	int i, c, rval, daemonize;
 	
 	daemonize = 0;
 	config_file = NULL;
+
+	sa.sa_handler = etherpoke_sigdie;
+	sigemptyset (&(sa.sa_mask));
+	sa.sa_flags = 0;
+
+	rval = 0;
+	rval &= sigaction (SIGINT, &sa, NULL);
+	rval &= sigaction (SIGQUIT, &sa, NULL);
+	rval &= sigaction (SIGTERM, &sa, NULL);
 	
 	while ( (c = getopt (argc, argv, "f:dhv")) != -1 ){
 		switch (c){
@@ -265,7 +283,10 @@ main (int argc, char *argv[])
 	for ( i = 0; i < etherpoke_conf->filter_cnt; i++ )
 		pcap_close (pcap_handle[i]);
 	
+	free (pcap_handle);
+	
 	config_close (etherpoke_conf);
+	free (pcap_session);
 	free (config_file);
 	
 	return EXIT_SUCCESS;
