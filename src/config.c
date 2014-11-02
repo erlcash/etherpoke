@@ -92,6 +92,8 @@ filter_destroy (struct config_filter *filter)
 		free (filter->session_begin);
 	if ( filter->session_end != NULL )
 		free (filter->session_end);
+	if ( filter->interface != NULL )
+		free (filter->interface);
 }
 
 struct config*
