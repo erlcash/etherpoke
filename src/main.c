@@ -11,9 +11,7 @@
 #include <unistd.h>
 
 #include "config.h"
-
 #include "etherpoke.h"
-#include "queue.h"
 #include "log.h"
 
 struct session_data
