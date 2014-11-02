@@ -1,26 +1,3 @@
-/*
- * config.c
- * 
- * Copyright 2013 Earl Cash <erl@codeward.org>
- * 
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
- * MA 02110-1301, USA.
- * 
- * 
- */
-
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -29,7 +6,7 @@
 #include "config.h"
 
 static int
-filter_set_name (filter_t *filter, const char *name)
+filter_set_name (struct config_filter *filter, const char *name)
 {
 	if ( filter->name != NULL )
 		free (filter->name);
@@ -43,35 +20,44 @@ filter_set_name (filter_t *filter, const char *name)
 }
 
 static int
-filter_set_ethaddr (filter_t *filter, const char *eth_addr)
+filter_set_matchrule (struct config_filter *filter, const char *rule)
 {
-	if ( filter->eth_addr != NULL )
-		free (filter->eth_addr);
+	if ( filter->match != NULL )
+		free (filter->match);
 	
-	filter->eth_addr = strdup (eth_addr);
-	
-	if ( filter->eth_addr == NULL )
+	filter->match = strdup (rule);
+
+	if ( filter->match == NULL )
 		return 1;
-	
-	// Convert string representation to the 6 byte representation
-	sscanf (filter->eth_addr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &(filter->eth_addr_bin[0]), &(filter->eth_addr_bin[1]),
-																&(filter->eth_addr_bin[2]), &(filter->eth_addr_bin[3]),
-																&(filter->eth_addr_bin[4]), &(filter->eth_addr_bin[5]));
 	
 	return 0;
 }
 
 static int
-filter_set_event (filter_t *filter, const char *cmd, int type)
+filter_set_interface (struct config_filter *filter, const char *interface)
+{
+	if ( filter->interface != NULL )
+		free (filter->interface);
+	
+	filter->interface = strdup (interface);
+
+	if ( filter->interface == NULL )
+		return 1;
+	
+	return 0;
+}
+
+static int
+filter_set_event (struct config_filter *filter, const char *cmd, int type)
 {
 	char **event_type;
 	
 	switch ( type ){
 		case FILTER_EVENT_BEGIN:
-			event_type = &(filter->cmd_session_begin);
+			event_type = &(filter->session_begin);
 			break;
 		case FILTER_EVENT_END:
-			event_type = &(filter->cmd_session_end);
+			event_type = &(filter->session_end);
 			break;
 		default:
 			return 1;
@@ -89,259 +75,152 @@ filter_set_event (filter_t *filter, const char *cmd, int type)
 }
 
 static int
-filter_set_session_timeout (filter_t *filter, uint32_t session_timeout)
+filter_set_session_timeout (struct config_filter *filter, uint32_t session_timeout)
 {
 	filter->session_timeout = session_timeout;
-	
 	return 0;
 }
 
 static void
-filter_destroy (filter_t *filter)
+filter_destroy (struct config_filter *filter)
 {
 	if ( filter->name != NULL )
 		free (filter->name);
-	if ( filter->eth_addr != NULL )
-		free (filter->eth_addr);
-	if ( filter->cmd_session_begin != NULL )
-		free (filter->cmd_session_begin);
-	if ( filter->cmd_session_end != NULL )
-		free (filter->cmd_session_end);
+	if ( filter->match != NULL )
+		free (filter->match);
+	if ( filter->session_begin != NULL )
+		free (filter->session_begin);
+	if ( filter->session_end != NULL )
+		free (filter->session_end);
 }
 
-static int
-filter_valid_ethaddr (const char *eth_addr)
+struct config*
+config_open (const char *filename, char *errbuf)
 {
-	size_t input_len;
-	
-	input_len = strlen (eth_addr);
-	
-	if ( input_len != 17 )
-		return CONFIG_FALSE;
-	
-	if ( (isxdigit (eth_addr[0]) && isxdigit (eth_addr[1]) && eth_addr[2] == ':')
-			&& (isxdigit (eth_addr[3]) && isxdigit (eth_addr[4]) && eth_addr[5] == ':')
-			&& (isxdigit (eth_addr[6]) && isxdigit (eth_addr[7]) && eth_addr[8] == ':')
-			&& (isxdigit (eth_addr[9]) && isxdigit (eth_addr[10]) && eth_addr[11] == ':')
-			&& (isxdigit (eth_addr[12]) && isxdigit (eth_addr[13]) && eth_addr[14] == ':')
-			&& (isxdigit (eth_addr[15]) && isxdigit (eth_addr[16])) )
-		return CONFIG_TRUE;
-	
-	return CONFIG_FALSE;
-}
+	// libconfig structure
+	config_t libconfig;
+	config_setting_t *root_setting, *filter_setting, *interface_setting;
+	struct config *conf;
+	const char *str_val;
+	int i, j, filter_cnt, interface_cnt, num;
 
-//
-// conf_t functions
-//
-
-static int
-conf_count_interfaces (config_t *conf)
-{
-	config_setting_t *interfaces;
+	config_init (&libconfig);
 	
-	interfaces = config_lookup (conf, "common.interfaces");
-	
-	if ( interfaces == NULL )
-		return -1;
-	
-	return config_setting_length (interfaces);
-}
-
-static int
-conf_count_filters (config_t *conf)
-{
-	config_setting_t *filters;
-	
-	filters = config_lookup (conf, "filters");
-	
-	if ( filters == NULL )
-		return -1;
-	
-	return config_setting_length (filters);
-}
-
-static int
-conf_load_interface (config_t *conf, char *interface, size_t index)
-{
-	config_setting_t *setting_interfaces;
-	const char *val;
-	
-	setting_interfaces = config_lookup (conf, "common.interfaces");
-	
-	if ( setting_interfaces == NULL )
-		return CONFIG_FALSE;
-	
-	val = config_setting_get_string_elem (setting_interfaces, index);
-	
-	if ( val == NULL )
-		return CONFIG_FALSE;
-	
-	strncpy (interface, val, INTERFACE_NAME_MAX_LEN);
-	interface[INTERFACE_NAME_MAX_LEN] = '\0';
-	
-	return CONFIG_TRUE;
-}
-
-static int
-conf_load_filter (config_t *conf, filter_t *filter, size_t index)
-{
-	const config_setting_t *setting_filters, *setting_filter;
-	const char *val;
-	long num;
-	
-	setting_filters = config_lookup (conf, "filters");
-	
-	if ( setting_filters == NULL )
-		return CONFIG_FALSE;
-	
-	setting_filter = config_setting_get_elem (setting_filters, index);
-	
-	if ( setting_filter == NULL )
-		return CONFIG_FALSE;
-	
-	val = config_setting_name (setting_filter);
-	
-	if ( val == NULL )
-		return CONFIG_FALSE;
-	
-	filter_set_name (filter, val);
-	
-	if ( config_setting_lookup_string (setting_filter, "mac_addr", &val) == CONFIG_FALSE )
-		return CONFIG_FALSE;
-	
-	// Validate eth address
-	if ( filter_valid_ethaddr (val) == CONFIG_FALSE )
-		return CONFIG_FALSE;
-	
-	filter_set_ethaddr (filter, val);
-	
-	if ( config_setting_lookup_string (setting_filter, "session_begin", &val) == CONFIG_FALSE )
-		return CONFIG_FALSE;
-	
-	filter_set_event (filter, val, FILTER_EVENT_BEGIN);
-	
-	if ( config_setting_lookup_string (setting_filter, "session_end", &val) == CONFIG_FALSE )
-		return CONFIG_FALSE;
-	
-	filter_set_event (filter, val, FILTER_EVENT_END);
-	
-	if ( config_setting_lookup_int (setting_filter, "session_timeout", &num) == CONFIG_FALSE )
-		return CONFIG_FALSE;
-	
-	filter_set_session_timeout (filter, ((num < 0)? (num * -1):num));
-	
-	return CONFIG_TRUE;
-}
-
-conf_t*
-conf_init (const char *file, char *errbuf)
-{
-	conf_t *conf;
-	config_t config; // libconfig structure
-	int i;
-	
-	conf = (conf_t*) malloc (sizeof (conf_t));
-	
-	if ( conf == NULL )
+	if ( config_read_file (&libconfig, filename) == CONFIG_FALSE ){
+		snprintf (errbuf, CONF_ERRBUF_SIZE, "%s on line %d", config_error_text (&libconfig), config_error_line (&libconfig));
+		config_destroy (&libconfig);
 		return NULL;
+	}
+
+	root_setting = config_root_setting (&libconfig);
+	filter_cnt = config_setting_length (root_setting);
+
+	if ( filter_cnt == 0 ){
+		snprintf (errbuf, CONF_ERRBUF_SIZE, "no packet capture filters specified");
+		config_destroy (&libconfig);
+		return NULL;
+	}
 	
-	memset (conf, 0, sizeof (conf_t));
+	conf = (struct config*) malloc (sizeof (struct config));
+	
+	if ( conf == NULL ){
+		config_destroy (&libconfig);
+		return NULL;
+	}
+	
+	memset (conf, 0, sizeof (struct config));
 	memset (errbuf, 0, sizeof (CONF_ERRBUF_SIZE));
+
+	conf->filter_cnt = filter_cnt;
+	conf->filter = (struct config_filter*) malloc (sizeof (struct config_filter) * filter_cnt);
 	
-	config_init (&config);
-	
-	if ( config_read_file (&config, file) == CONFIG_FALSE ){
-		snprintf (errbuf, CONF_ERRBUF_SIZE, "%s on line %d", config_error_text (&config), config_error_line (&config));
-		config_destroy (&config);
-		conf_destroy (conf);
+	if ( conf->filter == NULL ){
+		config_close (conf);
+		config_destroy (&libconfig);
 		return NULL;
 	}
-	
-	// Load interfaces
-	conf->interfaces_count = conf_count_interfaces (&config);
-	
-	if ( conf->interfaces_count <= 0 ){
-		snprintf (errbuf, CONF_ERRBUF_SIZE, "no network interfaces specified");
-		config_destroy (&config);
-		conf_destroy (conf);
-		return NULL;
-	}
-	
-	conf->interfaces = (char**) calloc (conf->interfaces_count, sizeof (char*));
-	
-	if ( conf->interfaces == NULL ){
-		snprintf (errbuf, CONF_ERRBUF_SIZE, "out of memory");
-		config_destroy (&config);
-		conf_destroy (conf);
-		return NULL;
-	}
-	
-	for ( i = 0; i < conf->interfaces_count; i++ ){
-		conf->interfaces[i] = (char*) calloc ((sizeof (char) * INTERFACE_NAME_MAX_LEN) + 1, 1);
-		
-		if ( conf->interfaces[i] == NULL ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "out of memory");
-			config_destroy (&config);
-			conf_destroy (conf);
+
+	memset (conf->filter, 0, sizeof (struct config_filter) * filter_cnt);
+
+	for ( i = 0; i < conf->filter_cnt; i++ ){
+		filter_setting = config_setting_get_elem (root_setting, i);
+
+		// Just in case... we do not want to touch the NULL pointer
+		if ( filter_setting == NULL )
+			break;
+
+		str_val = config_setting_name (filter_setting);
+
+		if ( str_val == NULL ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing filter name for group %d", i);
+			config_close (conf);
+			config_destroy (&libconfig);
 			return NULL;
 		}
-		
-		if ( conf_load_interface (&config, conf->interfaces[i], i) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "cannot load interface %d", i + 1);
-			config_destroy (&config);
-			conf_destroy (conf);
+
+		filter_set_name (&(conf->filter[i]), str_val);
+
+		if ( config_setting_lookup_string (filter_setting, "match", &str_val) == CONFIG_FALSE ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'match' for group %d", i);
+			config_close (conf);
+			config_destroy (&libconfig);
 			return NULL;
 		}
-	}
 	
-	// Load filters
-	conf->filters_count = conf_count_filters (&config);
-	
-	if ( conf->filters_count <= 0 ){
-		snprintf (errbuf, CONF_ERRBUF_SIZE, "no filters specified");
-		config_destroy (&config);
-		conf_destroy (conf);
-		return NULL;
-	}
-	
-	conf->filters = (filter_t*) calloc (conf->filters_count, sizeof (filter_t));
-	
-	if ( conf->filters == NULL ){
-		snprintf (errbuf, CONF_ERRBUF_SIZE, "out of memory");
-		config_destroy (&config);
-		conf_destroy (conf);
-		return NULL;
-	}
-	
-	for ( i = 0; i < conf->filters_count; i++ ){
-		if ( conf_load_filter (&config, &(conf->filters[i]), i) == CONFIG_FALSE ){
-			conf->filters_count = (i + 1); // update filter counter to avoid freeing unused memory
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "invalid data in filter '%d'", i + 1);
-			config_destroy (&config);
-			conf_destroy (conf);
+		filter_set_matchrule (&(conf->filter[i]), str_val);
+
+		if ( config_setting_lookup_string (filter_setting, "session_begin", &str_val) == CONFIG_FALSE ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'session_begin' in group %d", i);
+			config_close (conf);
+			config_destroy (&libconfig);
 			return NULL;
 		}
+	
+		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_BEGIN);
+	
+		if ( config_setting_lookup_string (filter_setting, "session_end", &str_val) == CONFIG_FALSE ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'session_end' in group %d", i);
+			config_close (conf);
+			config_destroy (&libconfig);
+			return NULL;
+		}
+	
+		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_END);
+	
+		if ( config_setting_lookup_int (filter_setting, "session_timeout", &num) == CONFIG_FALSE ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'session_timeout' in group %d", i);
+			config_close (conf);
+			config_destroy (&libconfig);
+			return NULL;
+		}
+	
+		filter_set_session_timeout (&(conf->filter[i]), ((num < 0)? (num * -1):num));
+
+		if ( config_setting_lookup_string (filter_setting, "interface", &str_val) == CONFIG_FALSE ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'interface' in group %d", i);
+			config_close (conf);
+			config_destroy (&libconfig);
+			return NULL;
+		}
+
+		filter_set_interface (&(conf->filter[i]), str_val);
 	}
 	
-	config_destroy (&config); // destroy libconfig object
+	config_destroy (&libconfig); // destroy libconfig object
 	
 	return conf;
 }
 
 void
-conf_destroy (conf_t *conf)
+config_close (struct config *conf)
 {
 	int i;
 	
-	for ( i = 0; i < conf->interfaces_count; i++ )
-		free (conf->interfaces[i]);
-	free (conf->interfaces);
+	for ( i = 0; i < conf->filter_cnt; i++ )
+		filter_destroy (&(conf->filter[i]));
 	
-	for ( i = 0; i < conf->filters_count; i++ )
-		filter_destroy (&(conf->filters[i]));
-	
-	free (conf->filters);
+	free (conf->filter);
+
 	free (conf);
-	conf = NULL;
 }
 
