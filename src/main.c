@@ -228,8 +228,8 @@ main (int argc, char *argv[])
 		int last_fd;
 
 		FD_ZERO (&fdset_read);
-		timeout.tv_sec = 0;
-		timeout.tv_usec = 400;
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
 			FD_SET (pcap_session[i].fd, &fdset_read);
