@@ -9,7 +9,7 @@ INSTALL_DIR = /usr/local/bin
 all: $(NAME)
 
 $(NAME): main.o config.o
-	$(CC) $(CFLAGS) $^ -o $(NAME) -lpcap -lpthread -lconfig
+	$(CC) $(CFLAGS) $^ -o $(NAME) -lpcap -lconfig
 
 main.o: main.c
 	$(CC) $(CFLAGS) -c main.c
