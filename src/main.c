@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <getopt.h>
 #include <time.h>
+#include <wordexp.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -59,6 +60,7 @@ main (int argc, char *argv[])
 	struct session_data *pcap_session;
 	struct sigaction sa;
 	int i, c, rval, daemonize;
+	pid_t pid;
 	
 	daemonize = 0;
 	config_file = NULL;
@@ -195,8 +197,6 @@ main (int argc, char *argv[])
 	
 	// Daemonize the process if the flag was set
 	if ( daemonize == 1 ){
-		pid_t pid;
-
 		pid = fork ();
 		
 		if ( pid > 0 ){
@@ -228,8 +228,8 @@ main (int argc, char *argv[])
 		int last_fd;
 
 		FD_ZERO (&fdset_read);
-		timeout.tv_sec = 1;
-		timeout.tv_usec = 0;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 700;
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
 			FD_SET (pcap_session[i].fd, &fdset_read);
@@ -265,17 +265,68 @@ main (int argc, char *argv[])
 				pcap_session[i].evt_flag = FILTER_EVENT_END;
 			}
 
-			switch ( pcap_session[i].evt_flag ){
-				case FILTER_EVENT_BEGIN:
-					fprintf (stderr, "session begin...\n");
-					pcap_session[i].evt_flag = 0;
-					break;
 
-				case FILTER_EVENT_END:
-					fprintf (stderr, "session end...\n");
-					pcap_session[i].evt_flag = 0;
-					pcap_session[i].ts = 0;
-					break;
+			//
+			// Execute event hook
+			//
+			if ( pcap_session[i].evt_flag ){
+				const char *cmd;
+				wordexp_t command;
+
+				switch ( pcap_session[i].evt_flag ){
+					case FILTER_EVENT_BEGIN:
+						fprintf (stderr, "SESSION_BEGIN %s\n", etherpoke_conf->filter[i].name);
+						cmd = etherpoke_conf->filter[i].session_begin;
+						pcap_session[i].evt_flag = 0;
+						break;
+
+					case FILTER_EVENT_END:
+						fprintf (stderr, "SESSION_END %s\n", etherpoke_conf->filter[i].name);
+						cmd = etherpoke_conf->filter[i].session_end;
+						pcap_session[i].evt_flag = 0;
+						pcap_session[i].ts = 0;
+						break;
+				}
+
+				rval = wordexp (cmd, &command, 0);
+
+				switch ( rval ){
+					case 0:
+						// Success
+						break;
+
+					case WRDE_NOSPACE:
+						fprintf (stderr, "%s: cannot convert event hook to executable format: out of memory\n", argv[0]);
+						wordfree (&command);
+						return EXIT_FAILURE;
+
+					default:
+						fprintf (stderr, "%s: invalid format of event hook\n", argv[0]);
+						break;
+				}
+
+				pid = fork ();
+
+				if ( pid == -1 ){
+					fprintf (stderr, "%s: cannot fork the process: %s\n", strerror (errno));
+					wordfree (&command);
+					return EXIT_FAILURE;
+				}
+
+				// Parent process, carry on...
+				if ( pid > 0 ){
+					wordfree (&command);
+					continue;
+				}
+
+				/*fclose (stdout);
+				fclose (stderr);*/
+
+				rval = execv (command.we_wordv[0], command.we_wordv);
+				wordfree (&command);
+
+				main_loop = 0;
+				break;
 			}
 		}
 	}
