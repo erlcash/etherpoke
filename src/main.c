@@ -254,10 +254,10 @@ main (int argc, char *argv[])
 				if ( rval != 1 )
 					continue;
 
-				if ( pcap_session[i].ts == 0 ){
+				if ( pcap_session[i].ts == 0 )
 					pcap_session[i].evt_flag = FILTER_EVENT_BEGIN;
-					pcap_session[i].ts = pkt_header->ts.tv_sec;
-				}
+
+				pcap_session[i].ts = pkt_header->ts.tv_sec;
 			}
 
 			if ( (pcap_session[i].ts > 0)
