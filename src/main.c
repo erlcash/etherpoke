@@ -60,13 +60,17 @@ main (int argc, char *argv[])
 			*config_file;
 	struct session_data *pcap_session;
 	struct sigaction sa;
-	int i, c, rval, daemonize, syslog_flags;
+	int i, c, rval, daemonize, syslog_flags, exitno;
 	pid_t pid;
 	
-	daemonize = 0;
-	syslog_flags = LOG_PID | LOG_PERROR;
 	config_file = NULL;
+	pcap_session = NULL;
+	etherpoke_conf = NULL;
+
+	daemonize = 0;
 	main_loop = 1;
+	exitno = EXIT_SUCCESS;
+	syslog_flags = LOG_PID | LOG_PERROR;
 
 	sa.sa_handler = etherpoke_sigdie;
 	sigemptyset (&(sa.sa_mask));
@@ -76,11 +80,6 @@ main (int argc, char *argv[])
 		switch (c){
 			case 'f':
 				config_file = strdup (optarg);
-				
-				if ( config_file == NULL ){
-					fprintf (stderr, "%s: cannot allocate memory for configuration file\n", argv[0]);
-					return EXIT_FAILURE;
-				}
 				break;
 			
 			case 'd':
@@ -89,48 +88,55 @@ main (int argc, char *argv[])
 			
 			case 'h':
 				etherpoke_help (argv[0]);
-				return EXIT_SUCCESS;
+				exitno = EXIT_SUCCESS;
+				goto cleanup;
 			
 			case 'v':
 				etherpoke_version (argv[0]);
-				return EXIT_SUCCESS;
+				exitno = EXIT_SUCCESS;
+				goto cleanup;
 			
 			default:
 				etherpoke_help (argv[0]);
-				return EXIT_FAILURE;
+				exitno = EXIT_FAILURE;
+				goto cleanup;
 		}
 	}
 
 	if ( config_file == NULL ){
 		fprintf (stderr, "%s: configuration file not specified. Use '-h' to see usage.\n", argv[0]);
-		return EXIT_FAILURE;
+		exitno = EXIT_FAILURE;
+		goto cleanup;
 	}
 	
 	etherpoke_conf = config_open (config_file, conf_errbuff);
 	
 	if ( etherpoke_conf == NULL ){
 		fprintf (stderr, "%s: cannot load configuration file '%s': %s\n", argv[0], config_file, conf_errbuff);
-		free (config_file);
-		return EXIT_FAILURE;
+		exitno = EXIT_FAILURE;
+		goto cleanup;
 	}
 
 	if ( etherpoke_conf->filter_cnt == 0 ){
 		fprintf (stderr, "%s: nothing to do, packet capture filters not specified.\n", argv[0]);
-		return EXIT_FAILURE;
+		exitno = EXIT_FAILURE;
+		goto cleanup;
 	}
 
 	pcap_handle = (pcap_t**) malloc (sizeof (pcap_t*) * etherpoke_conf->filter_cnt);
 
 	if ( pcap_handle == NULL ){
 		fprintf (stderr, "%s: cannot allocate memory for packet capture.\n", argv[0]);
-		return EXIT_FAILURE;
+		exitno = EXIT_FAILURE;
+		goto cleanup;
 	}
 
 	pcap_session = (struct session_data*) malloc (sizeof (struct session_data) * etherpoke_conf->filter_cnt);
 
 	if ( pcap_session == NULL ){
 		fprintf (stderr, "%s: cannot allocate memory for packet capture.\n", argv[0]);
-		return EXIT_FAILURE;
+		exitno = EXIT_FAILURE;
+		goto cleanup;
 	}
 
 	memset (pcap_session, 0, sizeof (struct session_data) * etherpoke_conf->filter_cnt);
@@ -145,42 +151,48 @@ main (int argc, char *argv[])
 
 		if ( pcap_handle[i] == NULL ){
 			fprintf (stderr, "%s: cannot start packet capture: %s\n", argv[0], pcap_errbuff);
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 
 		rval = pcap_set_promisc (pcap_handle[i], 1);
 
 		if ( rval != 0 ){
 			fprintf (stderr, "%s: cannot set promiscuous mode on interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 
 		rval = pcap_setnonblock (pcap_handle[i], 1, pcap_errbuff);
 
 		if ( rval == -1 ){
 			fprintf (stderr, "%s: cannot set nonblock mode on packet capture resource: %s\n", argv[0], pcap_errbuff);
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 
 		rval = pcap_activate (pcap_handle[i]);
 
 		if ( rval != 0 ){
 			fprintf (stderr, "%s: cannot activate packet capture on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_handle[i]));
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 
 		rval = pcap_compile (pcap_handle[i], &bpf_prog, etherpoke_conf->filter[i].match, 0, PCAP_NETMASK_UNKNOWN);
 
 		if ( rval == -1 ){
 			fprintf (stderr, "%s: cannot compile the filter's match rule '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_handle[i]));
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 
 		rval = pcap_setfilter (pcap_handle[i], &bpf_prog);
 
 		if ( rval == -1 ){
 			fprintf (stderr, "%s: cannot apply the filter '%s' on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_handle[i]));
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 
 		pcap_freecode (&bpf_prog);
@@ -189,7 +201,8 @@ main (int argc, char *argv[])
 
 		if ( pcap_session[i].fd == -1 ){
 			fprintf (stderr, "%s: cannot obtain file descriptor for packet capture interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 	}
 
@@ -203,7 +216,8 @@ main (int argc, char *argv[])
 
 	if ( rval != 0 ){
 		fprintf (stderr, "%s: cannot setup signal handler: %s\n", strerror (errno));
-		return EXIT_FAILURE;
+		exitno = EXIT_FAILURE;
+		goto cleanup;
 	}
 	
 	//
@@ -213,15 +227,18 @@ main (int argc, char *argv[])
 		pid = fork ();
 		
 		if ( pid > 0 ){
-			return EXIT_SUCCESS;
+			exitno = EXIT_SUCCESS;
+			goto cleanup;
 		} else if ( pid == -1 ){
 			fprintf (stderr, "%s: cannot daemonize the process (fork failed).\n", argv[0]);
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 		
 		if ( setsid () == -1 ){
 			fprintf (stderr, "%s: cannot daemonize the process (setsid failed).\n", argv[0]);
-			return EXIT_FAILURE;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 		
 		umask (0);
@@ -358,15 +375,23 @@ main (int argc, char *argv[])
 		}
 	}
 
-	for ( i = 0; i < etherpoke_conf->filter_cnt; i++ )
-		pcap_close (pcap_handle[i]);
+cleanup:
+	if ( pcap_handle != NULL ){
+		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ )
+			pcap_close (pcap_handle[i]);
 	
-	free (pcap_handle);
+		free (pcap_handle);
+	}
 	
-	config_close (etherpoke_conf);
-	free (pcap_session);
-	free (config_file);
+	if ( etherpoke_conf != NULL )
+		config_close (etherpoke_conf);
+
+	if ( pcap_session != NULL )
+		free (pcap_session);
+
+	if ( config_file != NULL )
+		free (config_file);
 	
-	return EXIT_SUCCESS;
+	return exitno;
 }
 
