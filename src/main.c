@@ -27,20 +27,21 @@ static int main_loop;
 static void
 etherpoke_help (const char *p)
 {
-	fprintf (stdout, "%s v%s\n\nUsage:\n"
+	fprintf (stdout, "%s %d.%d.%d\n\nUsage:\n"
 					 "  %s [-dhv] -f <FILE>\n\n"
 					 "Options:\n"
 					 "  -f <FILE>\tconfiguration file\n"
 					 "  -d\t\trun as a daemon\n"
 					 "  -h\t\tshow this help text\n"
 					 "  -v\t\tshow version information\n"
-					 , p, ETHERPOKE_VER, p);
+					 , p, ETHERPOKE_VER_MAJOR, ETHERPOKE_VER_MINOR, ETHERPOKE_VER_PATCH, p);
 }
 
 static void
 etherpoke_version (const char *p)
 {
-	fprintf (stdout, "%s v%s\n", p, ETHERPOKE_VER);
+	fprintf (stdout, "%s %d.%d.%d\n", p, ETHERPOKE_VER_MAJOR,
+										ETHERPOKE_VER_MINOR, ETHERPOKE_VER_PATCH);
 }
 
 static void
@@ -248,6 +249,9 @@ main (int argc, char *argv[])
 		timeout.tv_usec = 700;
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
+			if ( pcap_session[i].fd == -1 )
+				continue;
+
 			FD_SET (pcap_session[i].fd, &fdset_read);
 			last_fd = pcap_session[i].fd;
 		}
@@ -255,7 +259,8 @@ main (int argc, char *argv[])
 		rval = select (last_fd + 1, &fdset_read, NULL, NULL, &timeout);
 
 		if ( rval == -1 ){
-			syslog (LOG_ERR, "select system call failed: %s", strerror (errno));
+			if ( errno != EINTR )
+				syslog (LOG_ERR, "select system call failed: %s", strerror (errno));
 			break;
 		}
 
@@ -306,6 +311,10 @@ main (int argc, char *argv[])
 
 				rval = wordexp (cmd, &command, WRDE_UNDEF);
 
+				// TODO: if program ends up in any of the code branches producing a warning message,
+				// pcap handle should be closed and file descriptor set to -1.
+				// By doing so we will save valuable resources, to fix any of the errors will most likely require
+				// a program's restart in order to reload a configuration file.
 				if ( rval == WRDE_SYNTAX ){
 					syslog (LOG_WARNING, "invalid event hook in '%s': syntax error", etherpoke_conf->filter[i].name);
 					wordfree (&command);

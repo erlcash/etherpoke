@@ -1,7 +1,9 @@
 #ifndef _ETHERPOKE_H
 #define _ETHERPOKE_H
 
-#define ETHERPOKE_VER "2.0"
+#define ETHERPOKE_VER_MAJOR 2
+#define ETHERPOKE_VER_MINOR 0
+#define ETHERPOKE_VER_PATCH 2
 
 #endif
 
