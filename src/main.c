@@ -8,12 +8,12 @@
 #include <sys/stat.h>
 #include <getopt.h>
 #include <time.h>
+#include <syslog.h>
 #include <wordexp.h>
 #include <unistd.h>
 
 #include "config.h"
 #include "etherpoke.h"
-#include "log.h"
 
 struct session_data
 {
@@ -22,7 +22,7 @@ struct session_data
 	time_t ts;
 };
 
-int main_loop;
+static int main_loop;
 
 static void
 etherpoke_help (const char *p)
@@ -59,20 +59,17 @@ main (int argc, char *argv[])
 			*config_file;
 	struct session_data *pcap_session;
 	struct sigaction sa;
-	int i, c, rval, daemonize;
+	int i, c, rval, daemonize, syslog_flags;
 	pid_t pid;
 	
 	daemonize = 0;
+	syslog_flags = LOG_PID | LOG_PERROR;
 	config_file = NULL;
+	main_loop = 1;
 
 	sa.sa_handler = etherpoke_sigdie;
 	sigemptyset (&(sa.sa_mask));
 	sa.sa_flags = 0;
-
-	rval = 0;
-	rval &= sigaction (SIGINT, &sa, NULL);
-	rval &= sigaction (SIGQUIT, &sa, NULL);
-	rval &= sigaction (SIGTERM, &sa, NULL);
 	
 	while ( (c = getopt (argc, argv, "f:dhv")) != -1 ){
 		switch (c){
@@ -194,8 +191,23 @@ main (int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 	}
+
+	//
+	// Setup signal handler
+	//
+	rval = 0;
+	rval &= sigaction (SIGINT, &sa, NULL);
+	rval &= sigaction (SIGQUIT, &sa, NULL);
+	rval &= sigaction (SIGTERM, &sa, NULL);
+
+	if ( rval != 0 ){
+		fprintf (stderr, "%s: cannot setup signal handler: %s\n", strerror (errno));
+		return EXIT_FAILURE;
+	}
 	
+	//
 	// Daemonize the process if the flag was set
+	//
 	if ( daemonize == 1 ){
 		pid = fork ();
 		
@@ -216,10 +228,14 @@ main (int argc, char *argv[])
 		fclose (stdin);
 		fclose (stdout);
 		fclose (stderr);
+		syslog_flags = LOG_PID;
 	}
 
-	main_loop = 1;
+	openlog ("etherpoke", syslog_flags, LOG_DAEMON);
 
+	//
+	// Main loop
+	//
 	while ( main_loop ){
 		struct pcap_pkthdr *pkt_header;
 		const u_char *pkt_data;
@@ -239,7 +255,7 @@ main (int argc, char *argv[])
 		rval = select (last_fd + 1, &fdset_read, NULL, NULL, &timeout);
 
 		if ( rval == -1 ){
-			log_error ("select failed: %s", strerror (errno));
+			syslog (LOG_ERR, "select system call failed: %s", strerror (errno));
 			break;
 		}
 
@@ -275,42 +291,43 @@ main (int argc, char *argv[])
 
 				switch ( pcap_session[i].evt_flag ){
 					case FILTER_EVENT_BEGIN:
-						fprintf (stderr, "SESSION_BEGIN %s\n", etherpoke_conf->filter[i].name);
+						syslog (LOG_INFO, "SESSION_BEGIN %s", etherpoke_conf->filter[i].name);
 						cmd = etherpoke_conf->filter[i].session_begin;
 						pcap_session[i].evt_flag = 0;
 						break;
 
 					case FILTER_EVENT_END:
-						fprintf (stderr, "SESSION_END %s\n", etherpoke_conf->filter[i].name);
+						syslog (LOG_INFO, "SESSION_END %s", etherpoke_conf->filter[i].name);
 						cmd = etherpoke_conf->filter[i].session_end;
 						pcap_session[i].evt_flag = 0;
 						pcap_session[i].ts = 0;
 						break;
 				}
 
-				rval = wordexp (cmd, &command, 0);
+				rval = wordexp (cmd, &command, WRDE_UNDEF);
 
-				switch ( rval ){
-					case 0:
-						// Success
-						break;
-
-					case WRDE_NOSPACE:
-						fprintf (stderr, "%s: cannot convert event hook to executable format: out of memory\n", argv[0]);
-						wordfree (&command);
-						return EXIT_FAILURE;
-
-					default:
-						fprintf (stderr, "%s: invalid format of event hook\n", argv[0]);
-						break;
+				if ( rval == WRDE_SYNTAX ){
+					syslog (LOG_WARNING, "invalid event hook in '%s': syntax error", etherpoke_conf->filter[i].name);
+					wordfree (&command);
+					continue;
+				} else if ( rval == WRDE_NOSPACE ){
+					syslog (LOG_ERR, "cannot expand event hook string in '%s': out of memory", etherpoke_conf->filter[i].name);
+					wordfree (&command);
+					main_loop = 0;
+					break;
+				} else if ( rval == WRDE_BADVAL ){
+					syslog (LOG_WARNING, "invalid event hook in '%s': referencing undefined variable", etherpoke_conf->filter[i].name);
+					wordfree (&command);
+					continue;
 				}
 
 				pid = fork ();
 
 				if ( pid == -1 ){
-					fprintf (stderr, "%s: cannot fork the process: %s\n", strerror (errno));
+					syslog (LOG_ERR, "cannot fork the process: %s", strerror (errno));
 					wordfree (&command);
-					return EXIT_FAILURE;
+					main_loop = 0;
+					break;
 				}
 
 				// Parent process, carry on...
@@ -319,11 +336,12 @@ main (int argc, char *argv[])
 					continue;
 				}
 
-				/*fclose (stdout);
-				fclose (stderr);*/
-
+				errno = 0;
 				rval = execv (command.we_wordv[0], command.we_wordv);
 				wordfree (&command);
+
+				if ( rval == -1 )
+					syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", etherpoke_conf->filter[i].name, strerror (errno));
 
 				main_loop = 0;
 				break;
