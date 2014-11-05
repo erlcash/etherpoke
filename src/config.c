@@ -154,7 +154,7 @@ config_open (const char *filename, char *errbuf)
 		str_val = config_setting_name (filter_setting);
 
 		if ( str_val == NULL ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing filter name for group %d", i);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in %d. filter, missing filter name", i + 1);
 			config_close (conf);
 			config_destroy (&libconfig);
 			return NULL;
@@ -163,7 +163,14 @@ config_open (const char *filename, char *errbuf)
 		filter_set_name (&(conf->filter[i]), str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "match", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'match' for group %d", i);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'match'", conf->filter[i].name);
+			config_close (conf);
+			config_destroy (&libconfig);
+			return NULL;
+		}
+
+		if ( strlen (str_val) == 0 ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', empty option 'match'", conf->filter[i].name);
 			config_close (conf);
 			config_destroy (&libconfig);
 			return NULL;
@@ -172,7 +179,7 @@ config_open (const char *filename, char *errbuf)
 		filter_set_matchrule (&(conf->filter[i]), str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "session_begin", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'session_begin' in group %d", i);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_begin'", conf->filter[i].name);
 			config_close (conf);
 			config_destroy (&libconfig);
 			return NULL;
@@ -181,7 +188,7 @@ config_open (const char *filename, char *errbuf)
 		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_BEGIN);
 	
 		if ( config_setting_lookup_string (filter_setting, "session_end", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'session_end' in group %d", i);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_end'", conf->filter[i].name);
 			config_close (conf);
 			config_destroy (&libconfig);
 			return NULL;
@@ -190,7 +197,14 @@ config_open (const char *filename, char *errbuf)
 		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_END);
 	
 		if ( config_setting_lookup_int (filter_setting, "session_timeout", &num) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'session_timeout' in group %d", i);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_timeout'", conf->filter[i].name);
+			config_close (conf);
+			config_destroy (&libconfig);
+			return NULL;
+		}
+
+		if ( num == 0 ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', zero 'session_timeout' is not allowed", conf->filter[i].name);
 			config_close (conf);
 			config_destroy (&libconfig);
 			return NULL;
@@ -199,7 +213,14 @@ config_open (const char *filename, char *errbuf)
 		filter_set_session_timeout (&(conf->filter[i]), ((num < 0)? (num * -1):num));
 
 		if ( config_setting_lookup_string (filter_setting, "interface", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "missing 'interface' in group %d", i);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'interface'", conf->filter[i].name);
+			config_close (conf);
+			config_destroy (&libconfig);
+			return NULL;
+		}
+
+		if ( strlen (str_val) == 0 ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', empty option 'interface'", conf->filter[i].name);
 			config_close (conf);
 			config_destroy (&libconfig);
 			return NULL;
