@@ -255,6 +255,7 @@ main (int argc, char *argv[])
 	// Main loop
 	//
 	while ( main_loop ){
+		time_t current_time;
 		struct pcap_pkthdr *pkt_header;
 		const u_char *pkt_data;
 		struct timeval timeout;
@@ -281,11 +282,9 @@ main (int argc, char *argv[])
 			break;
 		}
 
+		time (&current_time);
+
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
-			time_t current_time;
-
-			time (&current_time);
-
 			if ( FD_ISSET (pcap_session[i].fd, &fdset_read) ){
 				rval = pcap_next_ex (pcap_handle[i], &pkt_header, &pkt_data);
 
@@ -332,8 +331,14 @@ main (int argc, char *argv[])
 				// pcap handle should be closed and file descriptor set to -1.
 				// By doing so we will save valuable resources, to fix any of the errors will most likely require
 				// a program's restart in order to reload a configuration file.
-				if ( rval == WRDE_SYNTAX ){
+				if ( rval == 0 ){
+					// OK, do nothing
+				} else if ( rval == WRDE_SYNTAX ){
 					syslog (LOG_WARNING, "invalid event hook in '%s': syntax error", etherpoke_conf->filter[i].name);
+					wordfree (&command);
+					continue;
+				} else if ( rval == WRDE_BADCHAR ){
+					syslog (LOG_WARNING, "invalid event hook in '%s': bad character", etherpoke_conf->filter[i].name);
 					wordfree (&command);
 					continue;
 				} else if ( rval == WRDE_BADVAL ){
