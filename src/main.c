@@ -62,7 +62,7 @@ main (int argc, char *argv[])
 	struct sigaction sa;
 	int i, c, rval, daemonize, syslog_flags, exitno;
 	pid_t pid;
-	
+
 	config_file = NULL;
 	pcap_session = NULL;
 	etherpoke_conf = NULL;
@@ -72,10 +72,6 @@ main (int argc, char *argv[])
 	exitno = EXIT_SUCCESS;
 	syslog_flags = LOG_PID | LOG_PERROR;
 
-	sa.sa_handler = etherpoke_sigdie;
-	sigemptyset (&(sa.sa_mask));
-	sa.sa_flags = 0;
-	
 	while ( (c = getopt (argc, argv, "f:dhv")) != -1 ){
 		switch (c){
 			case 'f':
@@ -209,10 +205,20 @@ main (int argc, char *argv[])
 	//
 	// Setup signal handler
 	//
+	sa.sa_handler = etherpoke_sigdie;
+	sigemptyset (&(sa.sa_mask));
+	sa.sa_flags = 0;
+
 	rval = 0;
 	rval &= sigaction (SIGINT, &sa, NULL);
 	rval &= sigaction (SIGQUIT, &sa, NULL);
 	rval &= sigaction (SIGTERM, &sa, NULL);
+
+	sa.sa_handler = SIG_IGN;
+	sigemptyset (&(sa.sa_mask));
+	sa.sa_flags = 0;
+
+	rval &= sigaction (SIGCHLD, &sa, NULL);
 
 	if ( rval != 0 ){
 		fprintf (stderr, "%s: cannot setup signal handler: %s\n", strerror (errno));
