@@ -336,15 +336,15 @@ main (int argc, char *argv[])
 					syslog (LOG_WARNING, "invalid event hook in '%s': syntax error", etherpoke_conf->filter[i].name);
 					wordfree (&command);
 					continue;
+				} else if ( rval == WRDE_BADVAL ){
+					syslog (LOG_WARNING, "invalid event hook in '%s': referencing undefined variable", etherpoke_conf->filter[i].name);
+					wordfree (&command);
+					continue;
 				} else if ( rval == WRDE_NOSPACE ){
 					syslog (LOG_ERR, "cannot expand event hook string in '%s': out of memory", etherpoke_conf->filter[i].name);
 					wordfree (&command);
 					main_loop = 0;
 					break;
-				} else if ( rval == WRDE_BADVAL ){
-					syslog (LOG_WARNING, "invalid event hook in '%s': referencing undefined variable", etherpoke_conf->filter[i].name);
-					wordfree (&command);
-					continue;
 				}
 
 				pid = fork ();
@@ -377,8 +377,10 @@ main (int argc, char *argv[])
 
 cleanup:
 	if ( pcap_handle != NULL ){
-		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ )
-			pcap_close (pcap_handle[i]);
+		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
+			if ( pcap_handle[i] != NULL )
+				pcap_close (pcap_handle[i]);
+		}
 	
 		free (pcap_handle);
 	}
