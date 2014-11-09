@@ -1,0 +1,23 @@
+version 2.0.2
+-------------
+
+* validation rules for configuration file
+
+* hook execution is done in 'controlled' manner, transparency of the whole
+ordeal was increased
+
+* event hooks that failed to execute are not subsequently reexecuted, entire
+filter is freed from the memory
+
+* bug fixes and code cleanup
+
+
+version 2.0
+-----------
+
+* Total redesign of previous version. Almost entire code base was replaced or
+removed. Version 2.0 no longer relies on POSIX threads, instead it takes
+advantage of events triggered on file descriptors, see select(2). Use of
+threads was a huge misstep, it not only made a whole program much more
+complicated but also more resource consumming.
+

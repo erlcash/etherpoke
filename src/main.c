@@ -14,15 +14,10 @@
 
 #include "config.h"
 #include "etherpoke.h"
-
-struct session_data
-{
-	int fd;
-	int evt_flag;
-	time_t ts;
-};
+#include "session_data.h"
 
 static int main_loop;
+static int exitno;
 
 static void
 etherpoke_help (const char *p)
@@ -48,19 +43,19 @@ static void
 etherpoke_sigdie (int signo)
 {
 	main_loop = 0;
+	exitno = signo;
 }
 
 int
 main (int argc, char *argv[])
 {
-	pcap_t **pcap_handle;
 	struct config *etherpoke_conf;
 	char conf_errbuff[CONF_ERRBUF_SIZE],
 			pcap_errbuff[PCAP_ERRBUF_SIZE],
 			*config_file;
 	struct session_data *pcap_session;
 	struct sigaction sa;
-	int i, c, rval, daemonize, syslog_flags, exitno;
+	int i, c, rval, daemonize, syslog_flags;
 	pid_t pid;
 
 	config_file = NULL;
@@ -119,15 +114,7 @@ main (int argc, char *argv[])
 		goto cleanup;
 	}
 
-	pcap_handle = (pcap_t**) malloc (sizeof (pcap_t*) * etherpoke_conf->filter_cnt);
-
-	if ( pcap_handle == NULL ){
-		fprintf (stderr, "%s: cannot allocate memory for packet capture.\n", argv[0]);
-		exitno = EXIT_FAILURE;
-		goto cleanup;
-	}
-
-	pcap_session = (struct session_data*) malloc (sizeof (struct session_data) * etherpoke_conf->filter_cnt);
+	pcap_session = (struct session_data*) calloc (etherpoke_conf->filter_cnt, sizeof (struct session_data));
 
 	if ( pcap_session == NULL ){
 		fprintf (stderr, "%s: cannot allocate memory for packet capture.\n", argv[0]);
@@ -135,23 +122,23 @@ main (int argc, char *argv[])
 		goto cleanup;
 	}
 
-	memset (pcap_session, 0, sizeof (struct session_data) * etherpoke_conf->filter_cnt);
-
 	//
 	// Prepare packet capture
 	//
 	for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
 		struct bpf_program bpf_prog;
 
-		pcap_handle[i] = pcap_create (etherpoke_conf->filter[i].interface, pcap_errbuff);
+		session_data_init (&(pcap_session[i]));
 
-		if ( pcap_handle[i] == NULL ){
+		pcap_session[i].handle = pcap_create (etherpoke_conf->filter[i].interface, pcap_errbuff);
+
+		if ( pcap_session[i].handle == NULL ){
 			fprintf (stderr, "%s: cannot start packet capture: %s\n", argv[0], pcap_errbuff);
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
 
-		rval = pcap_set_promisc (pcap_handle[i], 1);
+		rval = pcap_set_promisc (pcap_session[i].handle, 1);
 
 		if ( rval != 0 ){
 			fprintf (stderr, "%s: cannot set promiscuous mode on interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
@@ -159,7 +146,7 @@ main (int argc, char *argv[])
 			goto cleanup;
 		}
 
-		rval = pcap_setnonblock (pcap_handle[i], 1, pcap_errbuff);
+		rval = pcap_setnonblock (pcap_session[i].handle, 1, pcap_errbuff);
 
 		if ( rval == -1 ){
 			fprintf (stderr, "%s: cannot set nonblock mode on packet capture resource: %s\n", argv[0], pcap_errbuff);
@@ -167,33 +154,33 @@ main (int argc, char *argv[])
 			goto cleanup;
 		}
 
-		rval = pcap_activate (pcap_handle[i]);
+		rval = pcap_activate (pcap_session[i].handle);
 
 		if ( rval != 0 ){
-			fprintf (stderr, "%s: cannot activate packet capture on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_handle[i]));
+			fprintf (stderr, "%s: cannot activate packet capture on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
 
-		rval = pcap_compile (pcap_handle[i], &bpf_prog, etherpoke_conf->filter[i].match, 0, PCAP_NETMASK_UNKNOWN);
+		rval = pcap_compile (pcap_session[i].handle, &bpf_prog, etherpoke_conf->filter[i].match, 0, PCAP_NETMASK_UNKNOWN);
 
 		if ( rval == -1 ){
-			fprintf (stderr, "%s: cannot compile the filter's match rule '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_handle[i]));
+			fprintf (stderr, "%s: cannot compile the filter's match rule '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_session[i].handle));
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
 
-		rval = pcap_setfilter (pcap_handle[i], &bpf_prog);
+		rval = pcap_setfilter (pcap_session[i].handle, &bpf_prog);
 
 		if ( rval == -1 ){
-			fprintf (stderr, "%s: cannot apply the filter '%s' on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_handle[i]));
+			fprintf (stderr, "%s: cannot apply the filter '%s' on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_session[i].handle));
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
 
 		pcap_freecode (&bpf_prog);
 
-		pcap_session[i].fd = pcap_get_selectable_fd (pcap_handle[i]);
+		pcap_session[i].fd = pcap_get_selectable_fd (pcap_session[i].handle);
 
 		if ( pcap_session[i].fd == -1 ){
 			fprintf (stderr, "%s: cannot obtain file descriptor for packet capture interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
@@ -292,7 +279,7 @@ main (int argc, char *argv[])
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
 			if ( FD_ISSET (pcap_session[i].fd, &fdset_read) ){
-				rval = pcap_next_ex (pcap_handle[i], &pkt_header, &pkt_data);
+				rval = pcap_next_ex (pcap_session[i].handle, &pkt_header, &pkt_data);
 
 				if ( rval != 1 )
 					continue;
@@ -333,23 +320,22 @@ main (int argc, char *argv[])
 
 				rval = wordexp (cmd, &command, WRDE_UNDEF);
 
-				// TODO: if program ends up in any of the code branches producing a warning message,
-				// pcap handle should be closed and file descriptor set to -1.
-				// By doing so we will save valuable resources, to fix any of the errors will most likely require
-				// a program's restart in order to reload a configuration file.
 				if ( rval == 0 ){
 					// OK, do nothing
 				} else if ( rval == WRDE_SYNTAX ){
 					syslog (LOG_WARNING, "invalid event hook in '%s': syntax error", etherpoke_conf->filter[i].name);
 					wordfree (&command);
+					session_data_free (&(pcap_session[i]));
 					continue;
 				} else if ( rval == WRDE_BADCHAR ){
 					syslog (LOG_WARNING, "invalid event hook in '%s': bad character", etherpoke_conf->filter[i].name);
 					wordfree (&command);
+					session_data_free (&(pcap_session[i]));
 					continue;
 				} else if ( rval == WRDE_BADVAL ){
 					syslog (LOG_WARNING, "invalid event hook in '%s': referencing undefined variable", etherpoke_conf->filter[i].name);
 					wordfree (&command);
+					session_data_free (&(pcap_session[i]));
 					continue;
 				} else if ( rval == WRDE_NOSPACE ){
 					syslog (LOG_ERR, "cannot expand event hook string in '%s': out of memory", etherpoke_conf->filter[i].name);
@@ -387,20 +373,14 @@ main (int argc, char *argv[])
 	}
 
 cleanup:
-	if ( pcap_handle != NULL ){
-		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
-			if ( pcap_handle[i] != NULL )
-				pcap_close (pcap_handle[i]);
-		}
-	
-		free (pcap_handle);
+	if ( pcap_session != NULL ){
+		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ )
+			session_data_free (&(pcap_session[i]));
+		free (pcap_session);
 	}
-	
+
 	if ( etherpoke_conf != NULL )
 		config_close (etherpoke_conf);
-
-	if ( pcap_session != NULL )
-		free (pcap_session);
 
 	if ( config_file != NULL )
 		free (config_file);

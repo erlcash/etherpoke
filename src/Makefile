@@ -8,14 +8,17 @@ INSTALL_DIR = /usr/local/bin
 
 all: $(NAME)
 
-$(NAME): main.o config.o
+$(NAME): main.o config.o session_data.o
 	$(CC) $(CFLAGS) $^ -o $(NAME) -lpcap -lconfig
 
 main.o: main.c
-	$(CC) $(CFLAGS) -c main.c
+	$(CC) $(CFLAGS) -c $<
 
-config.o: config.c
-	$(CC) $(CFLAGS) -c config.c
+config.o: config.c config.h
+	$(CC) $(CFLAGS) -c $<
+
+session_data.o: session_data.c session_data.h
+	$(CC) $(CFLAGS) -c $<
 
 install: $(NAME)
 	install -m 755 $(NAME) $(INSTALL_DIR)
