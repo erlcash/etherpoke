@@ -21,6 +21,7 @@ struct config_filter
 	char *session_end;
 	char *interface;
 	uint32_t session_timeout;
+	uint8_t rfmon;
 };
 
 struct config

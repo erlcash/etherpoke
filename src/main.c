@@ -141,9 +141,41 @@ main (int argc, char *argv[])
 		rval = pcap_set_promisc (pcap_session[i].handle, 1);
 
 		if ( rval != 0 ){
-			fprintf (stderr, "%s: cannot set promiscuous mode on interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
+			fprintf (stderr, "%s: cannot enable promiscuous mode on interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
 			exitno = EXIT_FAILURE;
 			goto cleanup;
+		}
+
+		if ( etherpoke_conf->filter[i].rfmon ){
+			rval = pcap_can_set_rfmon (pcap_session[i].handle);
+
+			switch ( rval ){
+				case PCAP_ERROR_NO_SUCH_DEVICE:
+					snprintf (pcap_errbuff, sizeof (pcap_errbuff), "no such device");
+					break;
+				case PCAP_ERROR_PERM_DENIED:
+					snprintf (pcap_errbuff, sizeof (pcap_errbuff), "permission denied");
+					break;
+				case PCAP_ERROR_ACTIVATED:
+					snprintf (pcap_errbuff, sizeof (pcap_errbuff), "interface is already active");
+					break;
+				default:
+					snprintf (pcap_errbuff, sizeof (pcap_errbuff), "%s", pcap_geterr (pcap_session[i].handle));
+			}
+
+			if ( rval != 0 ){
+				fprintf (stderr, "%s: cannot enable monitor mode on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_errbuff);
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+			}
+
+			rval = pcap_set_rfmon (pcap_session[i].handle, 1);
+
+			if ( rval != 0 ){
+				fprintf (stderr, "%s: cannot enable monitor mode on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+			}
 		}
 
 		rval = pcap_setnonblock (pcap_session[i].handle, 1, pcap_errbuff);

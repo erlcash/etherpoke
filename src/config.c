@@ -74,11 +74,16 @@ filter_set_event (struct config_filter *filter, const char *cmd, int type)
 	return 0;
 }
 
-static int
+static void
 filter_set_session_timeout (struct config_filter *filter, uint32_t session_timeout)
 {
 	filter->session_timeout = session_timeout;
-	return 0;
+}
+
+static void
+filter_set_monitor_mode (struct config_filter *filter, uint8_t monitor_mode)
+{
+	filter->rfmon = monitor_mode;
 }
 
 static void
@@ -211,6 +216,12 @@ config_open (const char *filename, char *errbuf)
 		}
 	
 		filter_set_session_timeout (&(conf->filter[i]), ((num < 0)? (num * -1):num));
+
+		if ( config_setting_lookup_bool (filter_setting, "monitor_mode", &num) == CONFIG_FALSE ){
+			num = 0;
+		}
+
+		filter_set_monitor_mode (&(conf->filter[i]), num);
 
 		if ( config_setting_lookup_string (filter_setting, "interface", &str_val) == CONFIG_FALSE ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'interface'", conf->filter[i].name);
