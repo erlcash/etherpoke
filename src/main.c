@@ -324,22 +324,18 @@ main (int argc, char *argv[])
 					// OK, do nothing
 				} else if ( rval == WRDE_SYNTAX ){
 					syslog (LOG_WARNING, "invalid event hook in '%s': syntax error", etherpoke_conf->filter[i].name);
-					wordfree (&command);
 					session_data_free (&(pcap_session[i]));
 					continue;
 				} else if ( rval == WRDE_BADCHAR ){
 					syslog (LOG_WARNING, "invalid event hook in '%s': bad character", etherpoke_conf->filter[i].name);
-					wordfree (&command);
 					session_data_free (&(pcap_session[i]));
 					continue;
 				} else if ( rval == WRDE_BADVAL ){
 					syslog (LOG_WARNING, "invalid event hook in '%s': referencing undefined variable", etherpoke_conf->filter[i].name);
-					wordfree (&command);
 					session_data_free (&(pcap_session[i]));
 					continue;
 				} else if ( rval == WRDE_NOSPACE ){
 					syslog (LOG_ERR, "cannot expand event hook string in '%s': out of memory", etherpoke_conf->filter[i].name);
-					wordfree (&command);
 					main_loop = 0;
 					break;
 				}
