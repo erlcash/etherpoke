@@ -140,14 +140,6 @@ main (int argc, char *argv[])
 			goto cleanup;
 		}
 
-		rval = pcap_set_promisc (pcap_session[i].handle, 1);
-
-		if ( rval != 0 ){
-			fprintf (stderr, "%s: cannot enable promiscuous mode on interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
-			exitno = EXIT_FAILURE;
-			goto cleanup;
-		}
-
 		if ( etherpoke_conf->filter[i].rfmon ){
 			rval = pcap_can_set_rfmon (pcap_session[i].handle);
 
@@ -161,6 +153,14 @@ main (int argc, char *argv[])
 				}
 			} else {
 				fprintf (stderr, "%s: cannot enable monitor mode on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+			}
+		} else {
+			rval = pcap_set_promisc (pcap_session[i].handle, 1);
+
+			if ( rval != 0 ){
+				fprintf (stderr, "%s: cannot enable promiscuous mode on interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
 				exitno = EXIT_FAILURE;
 				goto cleanup;
 			}
