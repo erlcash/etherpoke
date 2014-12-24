@@ -16,6 +16,8 @@
 #include "etherpoke.h"
 #include "session_data.h"
 
+#define SELECT_TIMEOUT_MS 700
+
 static int main_loop;
 static int exitno;
 
@@ -164,6 +166,14 @@ main (int argc, char *argv[])
 			}
 		}
 
+		rval = pcap_set_timeout (pcap_session[i].handle, SELECT_TIMEOUT_MS);
+
+		if ( rval != 0 ){
+			fprintf (stderr, "%s: cannot set read timeout on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
 		rval = pcap_setnonblock (pcap_session[i].handle, 1, pcap_errbuff);
 
 		if ( rval == -1 ){
@@ -275,7 +285,7 @@ main (int argc, char *argv[])
 
 		FD_ZERO (&fdset_read);
 		timeout.tv_sec = 0;
-		timeout.tv_usec = 700;
+		timeout.tv_usec = SELECT_TIMEOUT_MS * 1000;
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
 			if ( pcap_session[i].fd == -1 )

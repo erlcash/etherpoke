@@ -5,6 +5,9 @@ version 2.1.0
 network interface, IEEE 802.11 wireless LANs management and control frames
 will be accessible.
 
+* Specify read timeout using pcap_set_timeout. On some systems, unspecified
+timeout caused the select(2) to freeze.
+
 version 2.0.2
 -------------
 
