@@ -314,8 +314,13 @@ main (int argc, char *argv[])
 			if ( FD_ISSET (pcap_session[i].fd, &fdset_read) ){
 				rval = pcap_next_ex (pcap_session[i].handle, &pkt_header, &pkt_data);
 
-				if ( rval != 1 )
+				if ( rval < 0 ){
+					syslog (LOG_ERR, "could not obtain packet from the queue: %s", pcap_geterr (pcap_session[i].handle));
+					main_loop = 0;
+					break;
+				} else if ( rval == 0 ){
 					continue;
+				}
 
 				if ( pcap_session[i].ts == 0 )
 					pcap_session[i].evt_flag = FILTER_EVENT_BEGIN;
