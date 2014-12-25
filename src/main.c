@@ -284,6 +284,7 @@ main (int argc, char *argv[])
 		int last_fd;
 
 		FD_ZERO (&fdset_read);
+		last_fd = 0;
 		timeout.tv_sec = 0;
 		timeout.tv_usec = SELECT_TIMEOUT_MS * 1000;
 
@@ -293,6 +294,11 @@ main (int argc, char *argv[])
 
 			FD_SET (pcap_session[i].fd, &fdset_read);
 			last_fd = pcap_session[i].fd;
+		}
+
+		if ( last_fd == 0 ){
+			syslog (LOG_ERR, "no more applicable filters left to use. Dying!");
+			break;
 		}
 
 		rval = select (last_fd + 1, &fdset_read, NULL, NULL, &timeout);
