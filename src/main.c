@@ -147,18 +147,12 @@ main (int argc, char *argv[])
 			goto cleanup;
 		}
 
-		if ( etherpoke_conf->filter[i].rfmon ){
-			rval = pcap_can_set_rfmon (pcap_session[i].handle);
+		rval = pcap_can_set_rfmon (pcap_session[i].handle);
 
-			if ( rval == 1 ){
-				rval = pcap_set_rfmon (pcap_session[i].handle, 1);
+		if ( rval == 1 ){
+			rval = pcap_set_rfmon (pcap_session[i].handle, etherpoke_conf->filter[i].rfmon);
 
-				if ( rval != 0 ){
-					fprintf (stderr, "%s: cannot enable monitor mode on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
-					exitno = EXIT_FAILURE;
-					goto cleanup;
-				}
-			} else {
+			if ( rval != 0 ){
 				fprintf (stderr, "%s: cannot enable monitor mode on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
 				exitno = EXIT_FAILURE;
 				goto cleanup;
