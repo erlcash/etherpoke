@@ -297,8 +297,10 @@ main (int argc, char *argv[])
 		rval = select (last_fd + 1, &fdset_read, NULL, NULL, &timeout);
 
 		if ( rval == -1 ){
-			if ( errno != EINTR )
-				syslog (LOG_ERR, "select system call failed: %s", strerror (errno));
+			if ( errno == EINTR )
+				continue;
+
+			syslog (LOG_ERR, "select system call failed: %s", strerror (errno));
 			break;
 		}
 
