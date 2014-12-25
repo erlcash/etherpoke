@@ -8,6 +8,8 @@ will be accessible.
 * Specify read timeout using pcap_set_timeout. On some systems, unspecified
 timeout caused the select(2) to freeze.
 
+* If no applicable filters are left to use, die instead of useless pooling.
+
 version 2.0.2
 -------------
 
