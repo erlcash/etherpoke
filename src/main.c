@@ -194,7 +194,7 @@ main (int argc, char *argv[])
 		rval = pcap_setfilter (pcap_session[i].handle, &bpf_prog);
 
 		if ( rval == -1 ){
-			fprintf (stderr, "%s: cannot apply the filter '%s' on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_session[i].handle));
+			fprintf (stderr, "%s: cannot apply the filter '%s' on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
@@ -229,7 +229,7 @@ main (int argc, char *argv[])
 	rval &= sigaction (SIGCHLD, &sa, NULL);
 
 	if ( rval != 0 ){
-		fprintf (stderr, "%s: cannot setup signal handler: %s\n", strerror (errno));
+		fprintf (stderr, "%s: cannot setup signal handler: %s\n", argv[0], strerror (errno));
 		exitno = EXIT_FAILURE;
 		goto cleanup;
 	}
@@ -256,7 +256,15 @@ main (int argc, char *argv[])
 		}
 		
 		umask (0);
-		chdir ("/");
+
+		rval = chdir ("/");
+
+		if ( rval == -1 ){
+			fprintf (stderr, "%s: cannot change working directory: %s\n", argv[0], strerror (errno));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
 		fclose (stdin);
 		fclose (stdout);
 		fclose (stderr);
