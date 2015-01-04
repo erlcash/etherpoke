@@ -1,3 +1,14 @@
+version 2.1.1
+-------------
+
+* Interface shutdown or any other problem causing packet reading to fail is no
+longer a reason to kill the daemon.
+
+* Use DLT_IEEE802_11_RADIO link-layer type when monitor mode is enabled.
+
+* Allow users to alter default link-layer type using the configuration option
+'link_type'.
+
 version 2.1.0
 -------------
 
