@@ -128,6 +128,7 @@ main (int argc, char *argv[])
 	//
 	for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
 		struct bpf_program bpf_prog;
+		int link_type;
 
 		session_data_init (&(pcap_session[i]));
 
@@ -139,24 +140,20 @@ main (int argc, char *argv[])
 			goto cleanup;
 		}
 
+		rval = pcap_set_rfmon (pcap_session[i].handle, etherpoke_conf->filter[i].rfmon);
+
+		if ( rval != 0 ){
+			fprintf (stderr, "%s: cannot enable monitor mode on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
 		rval = pcap_set_promisc (pcap_session[i].handle, !etherpoke_conf->filter[i].rfmon);
 
 		if ( rval != 0 ){
 			fprintf (stderr, "%s: cannot enable promiscuous mode on interface '%s'\n", argv[0], etherpoke_conf->filter[i].interface);
 			exitno = EXIT_FAILURE;
 			goto cleanup;
-		}
-
-		rval = pcap_can_set_rfmon (pcap_session[i].handle);
-
-		if ( rval == 1 ){
-			rval = pcap_set_rfmon (pcap_session[i].handle, etherpoke_conf->filter[i].rfmon);
-
-			if ( rval != 0 ){
-				fprintf (stderr, "%s: cannot enable monitor mode on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
-				exitno = EXIT_FAILURE;
-				goto cleanup;
-			}
 		}
 
 		rval = pcap_set_timeout (pcap_session[i].handle, SELECT_TIMEOUT_MS);
@@ -179,6 +176,37 @@ main (int argc, char *argv[])
 
 		if ( rval != 0 ){
 			fprintf (stderr, "%s: cannot activate packet capture on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
+		// Set link-layer type from configuration file.
+		if ( etherpoke_conf->filter[i].link_type != NULL ){
+			link_type = pcap_datalink_name_to_val (etherpoke_conf->filter[i].link_type);
+
+			if ( link_type == -1 ){
+				fprintf (stderr, "%s: cannot convert link-layer type '%s': unknown link-layer type name\n", argv[0], etherpoke_conf->filter[i].link_type);
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+			}
+		} else {
+			// If no link-layer type is specified in the configuration file,
+			// use default value. At this point I am sticking with DLTs used by
+			// wireshark on hardware I have available. Different values may
+			// apply to different hardware/driver therefore more research time
+			// should be put into this matter.
+			// More information: http://www.tcpdump.org/linktypes.html
+			if ( etherpoke_conf->filter[i].rfmon ){
+				link_type = DLT_IEEE802_11_RADIO;
+			} else {
+				link_type = DLT_EN10MB;
+			}
+		}
+
+		rval = pcap_set_datalink (pcap_session[i].handle, link_type);
+
+		if ( rval == -1 ){
+			fprintf (stderr, "%s: cannot set data-link type: %s\n", argv[0], pcap_geterr (pcap_session[i].handle));
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}

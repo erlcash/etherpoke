@@ -20,6 +20,7 @@ struct config_filter
 	char *session_begin;
 	char *session_end;
 	char *interface;
+	char *link_type;
 	uint32_t session_timeout;
 	uint8_t rfmon;
 };

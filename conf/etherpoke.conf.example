@@ -5,5 +5,6 @@ jukebox: {
 	session_end = "/usr/bin/audacious --stop";
 	session_timeout = 600;
 	monitor_mode = false;
+	link_type = "EN10MB";
 };
 

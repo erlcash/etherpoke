@@ -10,7 +10,12 @@ filter_set_name (struct config_filter *filter, const char *name)
 {
 	if ( filter->name != NULL )
 		free (filter->name);
-	
+
+	if ( name == NULL ){
+		filter->name = NULL;
+		return 0;
+	}
+
 	filter->name = strdup (name);
 	
 	if ( filter->name == NULL )
@@ -24,7 +29,12 @@ filter_set_matchrule (struct config_filter *filter, const char *rule)
 {
 	if ( filter->match != NULL )
 		free (filter->match);
-	
+
+	if ( rule == NULL ){
+		filter->match = NULL;
+		return 0;
+	}
+
 	filter->match = strdup (rule);
 
 	if ( filter->match == NULL )
@@ -38,7 +48,12 @@ filter_set_interface (struct config_filter *filter, const char *interface)
 {
 	if ( filter->interface != NULL )
 		free (filter->interface);
-	
+
+	if ( interface == NULL ){
+		filter->interface = NULL;
+		return 0;
+	}
+
 	filter->interface = strdup (interface);
 
 	if ( filter->interface == NULL )
@@ -86,6 +101,25 @@ filter_set_monitor_mode (struct config_filter *filter, uint8_t monitor_mode)
 	filter->rfmon = monitor_mode;
 }
 
+static int
+filter_set_link_type (struct config_filter *filter, const char *link_type)
+{
+	if ( filter->link_type != NULL )
+		free (filter->link_type);
+
+	if ( link_type == NULL ){
+		filter->link_type = NULL;
+		return 1;
+	}
+
+	filter->link_type = strdup (link_type);
+
+	if ( filter->link_type == NULL )
+		return 1;
+
+	return 0;
+}
+
 static void
 filter_destroy (struct config_filter *filter)
 {
@@ -99,6 +133,8 @@ filter_destroy (struct config_filter *filter)
 		free (filter->session_end);
 	if ( filter->interface != NULL )
 		free (filter->interface);
+	if ( filter->link_type != NULL )
+		free (filter->link_type);
 }
 
 struct config*
@@ -238,6 +274,12 @@ config_open (const char *filename, char *errbuf)
 		}
 
 		filter_set_interface (&(conf->filter[i]), str_val);
+
+		if ( config_setting_lookup_string (filter_setting, "link_type", &str_val) == CONFIG_FALSE ){
+			str_val = NULL;
+		}
+
+		filter_set_link_type (&(conf->filter[i]), str_val);
 	}
 	
 	config_destroy (&libconfig); // destroy libconfig object
