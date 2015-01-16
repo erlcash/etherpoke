@@ -9,6 +9,7 @@
 #include <pcap.h>
 #include <libconfig.h>
 #include <sys/stat.h>
+#include <poll.h>
 #include <getopt.h>
 #include <time.h>
 #include <syslog.h>
@@ -58,12 +59,14 @@ main (int argc, char *argv[])
 			pcap_errbuff[PCAP_ERRBUF_SIZE],
 			*config_file;
 	struct session_data *pcap_session;
+	struct pollfd *poll_fd;
 	struct sigaction sa;
 	int i, c, rval, daemonize, syslog_flags;
 	pid_t pid;
 
 	config_file = NULL;
 	pcap_session = NULL;
+	poll_fd = NULL;
 	etherpoke_conf = NULL;
 
 	daemonize = 0;
@@ -122,6 +125,14 @@ main (int argc, char *argv[])
 
 	if ( pcap_session == NULL ){
 		fprintf (stderr, "%s: cannot allocate memory for packet capture.\n", argv[0]);
+		exitno = EXIT_FAILURE;
+		goto cleanup;
+	}
+
+	poll_fd = (struct pollfd*) malloc (sizeof (struct pollfd) * etherpoke_conf->filter_cnt);
+
+	if ( poll_fd == NULL ){
+		fprintf (stderr, "%s: cannot allocate memory for file descriptor array.\n", argv[0]);
 		exitno = EXIT_FAILURE;
 		goto cleanup;
 	}
@@ -311,42 +322,39 @@ main (int argc, char *argv[])
 		time_t current_time;
 		struct pcap_pkthdr *pkt_header;
 		const u_char *pkt_data;
-		struct timeval timeout;
-		fd_set fdset_read;
-		int last_fd;
+		int filter_ok_cnt;
 
-		FD_ZERO (&fdset_read);
-		last_fd = 0;
-		timeout.tv_sec = 0;
-		timeout.tv_usec = SELECT_TIMEOUT_MS * 1000;
+		filter_ok_cnt = 0;
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
-			if ( pcap_session[i].fd == -1 )
-				continue;
+			poll_fd[i].fd = pcap_session[i].fd;
+			poll_fd[i].events = POLLIN;
+			poll_fd[i].revents = 0;
 
-			FD_SET (pcap_session[i].fd, &fdset_read);
-			last_fd = pcap_session[i].fd;
+			if ( pcap_session[i].fd != -1 )
+				filter_ok_cnt++;
 		}
 
-		if ( last_fd == 0 ){
+		if ( filter_ok_cnt == 0 ){
 			syslog (LOG_ERR, "no more applicable filters left to use. Dying!");
 			break;
 		}
 
-		rval = select (last_fd + 1, &fdset_read, NULL, NULL, &timeout);
+		errno = 0;
+		rval = poll (poll_fd, etherpoke_conf->filter_cnt, SELECT_TIMEOUT_MS);
 
 		if ( rval == -1 ){
 			if ( errno == EINTR )
 				continue;
 
-			syslog (LOG_ERR, "select system call failed: %s", strerror (errno));
+			syslog (LOG_ERR, "poll system call failed: %s", strerror (errno));
 			break;
 		}
 
 		time (&current_time);
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
-			if ( FD_ISSET (pcap_session[i].fd, &fdset_read) ){
+			if ( poll_fd[i].revents & POLLIN ){
 				rval = pcap_next_ex (pcap_session[i].handle, &pkt_header, &pkt_data);
 
 				if ( rval == 1 ){
@@ -443,6 +451,9 @@ cleanup:
 			session_data_free (&(pcap_session[i]));
 		free (pcap_session);
 	}
+
+	if ( poll_fd != NULL )
+		free (poll_fd);
 
 	if ( etherpoke_conf != NULL )
 		config_close (etherpoke_conf);

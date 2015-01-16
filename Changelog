@@ -1,3 +1,11 @@
+version 2.1.2
+-------------
+
+* System call select(2) replaced by poll(2). The latter system call no longer
+limits how many file descriptors can be watched for. This allows users to
+define number of filters greater than FD_SETSIZE, which on most GNU/Linux
+distributions is 1024.
+
 version 2.1.1
 -------------
 
