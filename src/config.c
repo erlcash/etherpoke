@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2013 - 2015, CodeWard.org
+ */
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>

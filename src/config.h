@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2013 - 2015, CodeWard.org
+ */
 #ifndef _CONFIG_H
 #define _CONFIG_H
 

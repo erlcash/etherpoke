@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2013 - 2015, CodeWard.org
+ */
 #include <pcap.h>
 
 #include "session_data.h"

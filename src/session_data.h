@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2013 - 2015, CodeWard.org
+ */
 #ifndef _PCAP_SESSION_H
 #define _PCAP_SESSION_H
 

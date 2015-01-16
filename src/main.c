@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2013 - 2015, CodeWard.org
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -193,8 +196,8 @@ main (int argc, char *argv[])
 			// If no link-layer type is specified in the configuration file,
 			// use default value. At this point I am sticking with DLTs used by
 			// wireshark on hardware I have available. Different values may
-			// apply to different hardware/driver therefore more research time
-			// should be put into this matter.
+			// apply to different hardware/driver, therefore more research time
+			// should be put into finding 'best' values.
 			// More information: http://www.tcpdump.org/linktypes.html
 			if ( etherpoke_conf->filter[i].rfmon ){
 				link_type = DLT_IEEE802_11_RADIO;
