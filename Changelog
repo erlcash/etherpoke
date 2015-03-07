@@ -1,3 +1,17 @@
+version 2.2.0
+-------------
+
+* Match rule is optional in the filter definition. If no BPF filter is
+specified or the option is ommited altogether, capture all traffic on the
+interface.
+
+* New event session_error. If there's an error in packet capture, fire up this
+event. The event was introduced to act upon interface shutdowns immediatelly.
+If this event is triggered before the event 'session_end', it cancels out any
+future triggers of 'session_end', until the event 'session_begin' is
+triggered again. This event is mandatory. Note that in some cases it is not
+possible to restart packet capture.
+
 version 2.1.2
 -------------
 

@@ -2,6 +2,7 @@ jukebox: {
 	interface = "wlp3s0";
 	match = "ether src f8:2f:a8:b0:c9:11 or ether src 08:9e:01:f5:43:16";
 	session_begin = "/usr/bin/audacious /home/music/dxhr_adam_jensen_apartment.mp3";
+	session_error = "/bin/echo Oops, error occured.";
 	session_end = "/usr/bin/audacious --stop";
 	session_timeout = 600;
 	monitor_mode = false;

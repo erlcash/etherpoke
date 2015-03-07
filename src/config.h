@@ -13,8 +13,12 @@
 
 #define CONF_ERRBUF_SIZE 1024
 
-#define FILTER_EVENT_BEGIN 1
-#define FILTER_EVENT_END 2
+enum
+{
+	FILTER_EVENT_BEGIN = 1,
+	FILTER_EVENT_END = 2,
+	FILTER_EVENT_ERROR = 3
+};
 
 struct config_filter
 {
@@ -22,6 +26,7 @@ struct config_filter
 	char *match;
 	char *session_begin;
 	char *session_end;
+	char *session_error;
 	char *interface;
 	char *link_type;
 	uint32_t session_timeout;

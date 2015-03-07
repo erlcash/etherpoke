@@ -225,23 +225,25 @@ main (int argc, char *argv[])
 			goto cleanup;
 		}
 
-		rval = pcap_compile (pcap_session[i].handle, &bpf_prog, etherpoke_conf->filter[i].match, 0, PCAP_NETMASK_UNKNOWN);
+		if ( etherpoke_conf->filter[i].match != NULL ){
+			rval = pcap_compile (pcap_session[i].handle, &bpf_prog, etherpoke_conf->filter[i].match, 0, PCAP_NETMASK_UNKNOWN);
 
-		if ( rval == -1 ){
-			fprintf (stderr, "%s: cannot compile the filter's match rule '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_session[i].handle));
-			exitno = EXIT_FAILURE;
-			goto cleanup;
+			if ( rval == -1 ){
+				fprintf (stderr, "%s: cannot compile the filter '%s' match rule: %s\n", argv[0], etherpoke_conf->filter[i].name, pcap_geterr (pcap_session[i].handle));
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+			}
+
+			rval = pcap_setfilter (pcap_session[i].handle, &bpf_prog);
+
+			if ( rval == -1 ){
+				fprintf (stderr, "%s: cannot apply the filter '%s' on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+			}
+
+			pcap_freecode (&bpf_prog);
 		}
-
-		rval = pcap_setfilter (pcap_session[i].handle, &bpf_prog);
-
-		if ( rval == -1 ){
-			fprintf (stderr, "%s: cannot apply the filter '%s' on interface '%s': %s\n", argv[0], etherpoke_conf->filter[i].name, etherpoke_conf->filter[i].interface, pcap_geterr (pcap_session[i].handle));
-			exitno = EXIT_FAILURE;
-			goto cleanup;
-		}
-
-		pcap_freecode (&bpf_prog);
 
 		pcap_session[i].fd = pcap_get_selectable_fd (pcap_session[i].handle);
 
@@ -328,8 +330,7 @@ main (int argc, char *argv[])
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
 			poll_fd[i].fd = pcap_session[i].fd;
-			poll_fd[i].events = POLLIN;
-			poll_fd[i].revents = 0;
+			poll_fd[i].events = POLLIN | POLLERR;
 
 			if ( pcap_session[i].fd != -1 )
 				filter_ok_cnt++;
@@ -354,7 +355,8 @@ main (int argc, char *argv[])
 		time (&current_time);
 
 		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
-			if ( poll_fd[i].revents & POLLIN ){
+			// Handle incoming packet
+			if ( (poll_fd[i].revents & POLLIN) || (poll_fd[i].revents & POLLERR) ){
 				rval = pcap_next_ex (pcap_session[i].handle, &pkt_header, &pkt_data);
 
 				if ( rval == 1 ){
@@ -363,7 +365,7 @@ main (int argc, char *argv[])
 
 					pcap_session[i].ts = pkt_header->ts.tv_sec;
 				} else if ( rval < 0 ){
-					syslog (LOG_WARNING, "could not obtain packet from the queue: %s", pcap_geterr (pcap_session[i].handle));
+					pcap_session[i].evt_flag = FILTER_EVENT_ERROR;
 				}
 			}
 
@@ -371,7 +373,6 @@ main (int argc, char *argv[])
 					&& (difftime (current_time, pcap_session[i].ts) >= etherpoke_conf->filter[i].session_timeout) ){
 				pcap_session[i].evt_flag = FILTER_EVENT_END;
 			}
-
 
 			//
 			// Execute event hook
@@ -390,6 +391,13 @@ main (int argc, char *argv[])
 					case FILTER_EVENT_END:
 						syslog (LOG_INFO, "SESSION_END %s", etherpoke_conf->filter[i].name);
 						cmd = etherpoke_conf->filter[i].session_end;
+						pcap_session[i].evt_flag = 0;
+						pcap_session[i].ts = 0;
+						break;
+
+					case FILTER_EVENT_ERROR:
+						syslog (LOG_INFO, "SESSION_ERROR %s", etherpoke_conf->filter[i].name);
+						cmd = etherpoke_conf->filter[i].session_error;
 						pcap_session[i].evt_flag = 0;
 						pcap_session[i].ts = 0;
 						break;

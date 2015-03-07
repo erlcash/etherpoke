@@ -77,6 +77,9 @@ filter_set_event (struct config_filter *filter, const char *cmd, int type)
 		case FILTER_EVENT_END:
 			event_type = &(filter->session_end);
 			break;
+		case FILTER_EVENT_ERROR:
+			event_type = &(filter->session_error);
+			break;
 		default:
 			return 1;
 	}
@@ -134,6 +137,8 @@ filter_destroy (struct config_filter *filter)
 		free (filter->session_begin);
 	if ( filter->session_end != NULL )
 		free (filter->session_end);
+	if ( filter->session_error != NULL )
+		free (filter->session_error);
 	if ( filter->interface != NULL )
 		free (filter->interface);
 	if ( filter->link_type != NULL )
@@ -207,19 +212,9 @@ config_open (const char *filename, char *errbuf)
 		filter_set_name (&(conf->filter[i]), str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "match", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'match'", conf->filter[i].name);
-			config_close (conf);
-			config_destroy (&libconfig);
-			return NULL;
+			str_val = NULL;
 		}
 
-		if ( strlen (str_val) == 0 ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', empty option 'match'", conf->filter[i].name);
-			config_close (conf);
-			config_destroy (&libconfig);
-			return NULL;
-		}
-	
 		filter_set_matchrule (&(conf->filter[i]), str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "session_begin", &str_val) == CONFIG_FALSE ){
@@ -239,6 +234,15 @@ config_open (const char *filename, char *errbuf)
 		}
 	
 		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_END);
+
+		if ( config_setting_lookup_string (filter_setting, "session_error", &str_val) == CONFIG_FALSE ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_error'", conf->filter[i].name);
+			config_close (conf);
+			config_destroy (&libconfig);
+			return NULL;
+		}
+
+		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_ERROR);
 	
 		if ( config_setting_lookup_int (filter_setting, "session_timeout", &num) == CONFIG_FALSE ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_timeout'", conf->filter[i].name);
