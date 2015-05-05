@@ -118,7 +118,7 @@ main (int argc, char *argv[])
 	}
 
 	if ( etherpoke_conf->filter_cnt == 0 ){
-		fprintf (stderr, "%s: nothing to do, packet capture filters not specified.\n", argv[0]);
+		fprintf (stderr, "%s: nothing to do, no filter specified.\n", argv[0]);
 		exitno = EXIT_FAILURE;
 		goto cleanup;
 	}
@@ -344,6 +344,12 @@ main (int argc, char *argv[])
 		syslog_flags = LOG_PID;
 	}
 
+	// Populate poll structure
+	for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
+		poll_fd[i].fd = pcap_session[i].fd;
+		poll_fd[i].events = POLLIN | POLLERR;
+	}
+
 	openlog ("etherpoke", syslog_flags, LOG_DAEMON);
 
 	//
@@ -353,23 +359,7 @@ main (int argc, char *argv[])
 		const u_char *pkt_data;
 		struct pcap_pkthdr *pkt_header;
 		time_t current_time;
-		int filter_ok_cnt;
 		wordexp_t *cmd_exp;
-
-		filter_ok_cnt = 0;
-
-		for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
-			poll_fd[i].fd = pcap_session[i].fd;
-			poll_fd[i].events = POLLIN | POLLERR;
-
-			if ( pcap_session[i].fd != -1 )
-				filter_ok_cnt++;
-		}
-
-		if ( filter_ok_cnt == 0 ){
-			syslog (LOG_ERR, "no more applicable filters left to use. Dying!");
-			break;
-		}
 
 		errno = 0;
 		rval = poll (poll_fd, etherpoke_conf->filter_cnt, SELECT_TIMEOUT_MS);
