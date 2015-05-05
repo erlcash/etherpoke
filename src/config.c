@@ -151,10 +151,10 @@ config_open (const char *filename, char *errbuf)
 {
 	// libconfig structure
 	config_t libconfig;
-	config_setting_t *root_setting, *filter_setting, *interface_setting;
+	config_setting_t *root_setting, *filter_setting;
 	struct config *conf;
 	const char *str_val;
-	int i, j, filter_cnt, interface_cnt, num;
+	int i, filter_cnt, num;
 
 	config_init (&libconfig);
 	
