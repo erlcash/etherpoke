@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -std=gnu99 -O2 -pedantic -ggdb
+CFLAGS = -std=gnu99 -O2 -pedantic -Wall -ggdb
 
 NAME = etherpoke
 INSTALL_DIR = /usr/local/bin
