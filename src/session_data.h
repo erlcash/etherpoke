@@ -1,8 +1,8 @@
 /*
  * Copyright (c) 2013 - 2015, CodeWard.org
  */
-#ifndef _PCAP_SESSION_H
-#define _PCAP_SESSION_H
+#ifndef _SESSION_DATA_H
+#define _SESSION_DATA_H
 
 #include <pcap.h>
 #include <wordexp.h>
