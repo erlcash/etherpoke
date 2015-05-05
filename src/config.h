@@ -7,18 +7,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-// Maximum length of interface name
-// FIXME: The value should probably be used from IFNAMSIZ
-#define INTERFACE_NAME_MAX_LEN 24
-
-#define CONF_ERRBUF_SIZE 1024
-
-enum
-{
-	FILTER_EVENT_BEGIN = 1,
-	FILTER_EVENT_END = 2,
-	FILTER_EVENT_ERROR = 3
-};
+#define CONF_ERRBUF_SIZE 256
 
 struct config_filter
 {

@@ -1,3 +1,7 @@
+version 2.2.1
+
+* Carry out the command expansion only once for each event, at program start.
+
 version 2.2.0
 -------------
 

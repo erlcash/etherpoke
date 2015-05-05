@@ -6,7 +6,7 @@
 
 #define ETHERPOKE_VER_MAJOR 2
 #define ETHERPOKE_VER_MINOR 2
-#define ETHERPOKE_VER_PATCH 0
+#define ETHERPOKE_VER_PATCH 1
 
 #endif
 

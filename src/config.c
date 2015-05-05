@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <libconfig.h>
 
+#include "session_event.h"
 #include "config.h"
 
 static int
@@ -71,13 +72,13 @@ filter_set_event (struct config_filter *filter, const char *cmd, int type)
 	char **event_type;
 	
 	switch ( type ){
-		case FILTER_EVENT_BEGIN:
+		case SE_BEG:
 			event_type = &(filter->session_begin);
 			break;
-		case FILTER_EVENT_END:
+		case SE_END:
 			event_type = &(filter->session_end);
 			break;
-		case FILTER_EVENT_ERROR:
+		case SE_ERR:
 			event_type = &(filter->session_error);
 			break;
 		default:
@@ -224,7 +225,7 @@ config_open (const char *filename, char *errbuf)
 			return NULL;
 		}
 	
-		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_BEGIN);
+		filter_set_event (&(conf->filter[i]), str_val, SE_BEG);
 	
 		if ( config_setting_lookup_string (filter_setting, "session_end", &str_val) == CONFIG_FALSE ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_end'", conf->filter[i].name);
@@ -233,7 +234,7 @@ config_open (const char *filename, char *errbuf)
 			return NULL;
 		}
 	
-		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_END);
+		filter_set_event (&(conf->filter[i]), str_val, SE_END);
 
 		if ( config_setting_lookup_string (filter_setting, "session_error", &str_val) == CONFIG_FALSE ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_error'", conf->filter[i].name);
@@ -242,7 +243,7 @@ config_open (const char *filename, char *errbuf)
 			return NULL;
 		}
 
-		filter_set_event (&(conf->filter[i]), str_val, FILTER_EVENT_ERROR);
+		filter_set_event (&(conf->filter[i]), str_val, SE_ERR);
 	
 		if ( config_setting_lookup_int (filter_setting, "session_timeout", &num) == CONFIG_FALSE ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_timeout'", conf->filter[i].name);

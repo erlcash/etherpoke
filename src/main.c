@@ -22,6 +22,8 @@
 
 #define SELECT_TIMEOUT_MS 700
 
+#define WORDEXP_FLAGS WRDE_UNDEF
+
 static int main_loop;
 static int exitno;
 
@@ -137,14 +139,41 @@ main (int argc, char *argv[])
 		goto cleanup;
 	}
 
-	//
-	// Prepare packet capture
-	//
 	for ( i = 0; i < etherpoke_conf->filter_cnt; i++ ){
 		struct bpf_program bpf_prog;
 		int link_type;
 
 		session_data_init (&(pcap_session[i]));
+
+		rval = wordexp (etherpoke_conf->filter[i].session_begin, &(pcap_session[i].evt_cmd_beg), WORDEXP_FLAGS);
+
+		if ( rval == 0 )
+			rval = wordexp (etherpoke_conf->filter[i].session_error, &(pcap_session[i].evt_cmd_err), WORDEXP_FLAGS);
+
+		if ( rval == 0 )
+			rval = wordexp (etherpoke_conf->filter[i].session_end, &(pcap_session[i].evt_cmd_end), WORDEXP_FLAGS);
+
+		switch ( rval ){
+			case WRDE_SYNTAX:
+				fprintf (stderr, "%s: invalid event hook in '%s': syntax error\n", argv[0], etherpoke_conf->filter[i].name);
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+
+			case WRDE_BADCHAR:
+				fprintf (stderr, "%s: invalid event hook in '%s': bad character\n", argv[0], etherpoke_conf->filter[i].name);
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+
+			case WRDE_BADVAL:
+				fprintf (stderr, "%s: invalid event hook in '%s': referencing undefined variable\n", argv[0], etherpoke_conf->filter[i].name);
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+
+			case WRDE_NOSPACE:
+				fprintf (stderr, "%s: cannot expand event hook string in '%s': out of memory\n", argv[0], etherpoke_conf->filter[i].name);
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+		}
 
 		pcap_session[i].handle = pcap_create (etherpoke_conf->filter[i].interface, pcap_errbuff);
 
@@ -321,10 +350,11 @@ main (int argc, char *argv[])
 	// Main loop
 	//
 	while ( main_loop ){
-		time_t current_time;
-		struct pcap_pkthdr *pkt_header;
 		const u_char *pkt_data;
+		struct pcap_pkthdr *pkt_header;
+		time_t current_time;
 		int filter_ok_cnt;
+		wordexp_t *cmd_exp;
 
 		filter_ok_cnt = 0;
 
@@ -360,96 +390,67 @@ main (int argc, char *argv[])
 				rval = pcap_next_ex (pcap_session[i].handle, &pkt_header, &pkt_data);
 
 				if ( rval == 1 ){
-					if ( pcap_session[i].ts == 0 )
-						pcap_session[i].evt_flag = FILTER_EVENT_BEGIN;
+					if ( pcap_session[i].evt.ts == 0 )
+						pcap_session[i].evt.type = SE_BEG;
 
-					pcap_session[i].ts = pkt_header->ts.tv_sec;
+					pcap_session[i].evt.ts = pkt_header->ts.tv_sec;
 				} else if ( rval < 0 ){
-					pcap_session[i].evt_flag = FILTER_EVENT_ERROR;
+					pcap_session[i].evt.type = SE_ERR;
 				}
 			}
 
-			if ( (pcap_session[i].ts > 0)
-					&& (difftime (current_time, pcap_session[i].ts) >= etherpoke_conf->filter[i].session_timeout) ){
-				pcap_session[i].evt_flag = FILTER_EVENT_END;
+			if ( (pcap_session[i].evt.ts > 0)
+					&& (difftime (current_time, pcap_session[i].evt.ts) >= etherpoke_conf->filter[i].session_timeout) ){
+				pcap_session[i].evt.type = SE_END;
 			}
 
-			//
-			// Execute event hook
-			//
-			if ( pcap_session[i].evt_flag ){
-				const char *cmd;
-				wordexp_t command;
+			cmd_exp = NULL;
 
-				switch ( pcap_session[i].evt_flag ){
-					case FILTER_EVENT_BEGIN:
-						syslog (LOG_INFO, "SESSION_BEGIN %s", etherpoke_conf->filter[i].name);
-						cmd = etherpoke_conf->filter[i].session_begin;
-						pcap_session[i].evt_flag = 0;
-						break;
-
-					case FILTER_EVENT_END:
-						syslog (LOG_INFO, "SESSION_END %s", etherpoke_conf->filter[i].name);
-						cmd = etherpoke_conf->filter[i].session_end;
-						pcap_session[i].evt_flag = 0;
-						pcap_session[i].ts = 0;
-						break;
-
-					case FILTER_EVENT_ERROR:
-						syslog (LOG_INFO, "SESSION_ERROR %s", etherpoke_conf->filter[i].name);
-						cmd = etherpoke_conf->filter[i].session_error;
-						pcap_session[i].evt_flag = 0;
-						pcap_session[i].ts = 0;
-						break;
-				}
-
-				rval = wordexp (cmd, &command, WRDE_UNDEF);
-
-				if ( rval == 0 ){
-					// OK, do nothing
-				} else if ( rval == WRDE_SYNTAX ){
-					syslog (LOG_WARNING, "invalid event hook in '%s': syntax error", etherpoke_conf->filter[i].name);
-					session_data_free (&(pcap_session[i]));
-					continue;
-				} else if ( rval == WRDE_BADCHAR ){
-					syslog (LOG_WARNING, "invalid event hook in '%s': bad character", etherpoke_conf->filter[i].name);
-					session_data_free (&(pcap_session[i]));
-					continue;
-				} else if ( rval == WRDE_BADVAL ){
-					syslog (LOG_WARNING, "invalid event hook in '%s': referencing undefined variable", etherpoke_conf->filter[i].name);
-					session_data_free (&(pcap_session[i]));
-					continue;
-				} else if ( rval == WRDE_NOSPACE ){
-					syslog (LOG_ERR, "cannot expand event hook string in '%s': out of memory", etherpoke_conf->filter[i].name);
-					main_loop = 0;
+			switch ( pcap_session[i].evt.type ){
+				case SE_BEG:
+					syslog (LOG_INFO, "SESSION_BEGIN %s", etherpoke_conf->filter[i].name);
+					cmd_exp = &(pcap_session[i].evt_cmd_beg);
+					pcap_session[i].evt.type = SE_NUL;
 					break;
-				}
 
-				pid = fork ();
-
-				if ( pid == -1 ){
-					syslog (LOG_ERR, "cannot fork the process: %s", strerror (errno));
-					wordfree (&command);
-					main_loop = 0;
+				case SE_END:
+					syslog (LOG_INFO, "SESSION_END %s", etherpoke_conf->filter[i].name);
+					cmd_exp = &(pcap_session[i].evt_cmd_end);
+					pcap_session[i].evt.type = SE_NUL;
+					pcap_session[i].evt.ts = 0;
 					break;
-				}
 
-				// Parent process, carry on...
-				if ( pid > 0 ){
-					wordfree (&command);
-					continue;
-				}
+				case SE_ERR:
+					syslog (LOG_INFO, "SESSION_ERROR %s", etherpoke_conf->filter[i].name);
+					cmd_exp = &(pcap_session[i].evt_cmd_err);
+					pcap_session[i].evt.type = SE_NUL;
+					pcap_session[i].evt.ts = 0;
+					break;
+			}
 
-				errno = 0;
-				rval = execv (command.we_wordv[0], command.we_wordv);
-				wordfree (&command);
+			if ( cmd_exp == NULL )
+				continue;
 
-				if ( rval == -1 )
-					syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", etherpoke_conf->filter[i].name, strerror (errno));
+			pid = fork ();
 
+			if ( pid == -1 ){
+				syslog (LOG_ERR, "cannot fork the process: %s", strerror (errno));
 				main_loop = 0;
 				break;
 			}
+
+			// Parent process, carry on...
+			if ( pid > 0 )
+				continue;
+
+			errno = 0;
+			rval = execv (cmd_exp->we_wordv[0], cmd_exp->we_wordv);
+
+			if ( rval == -1 )
+				syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", etherpoke_conf->filter[i].name, strerror (errno));
+
+			main_loop = 0;
+			break;
 		}
 	}
 

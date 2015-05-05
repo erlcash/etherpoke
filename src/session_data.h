@@ -5,13 +5,18 @@
 #define _PCAP_SESSION_H
 
 #include <pcap.h>
+#include <wordexp.h>
+
+#include "session_event.h"
 
 struct session_data
 {
-	pcap_t *handle;
 	int fd;
-	int evt_flag;
-	time_t ts;
+	pcap_t *handle;
+	struct session_event evt;
+	wordexp_t evt_cmd_beg;
+	wordexp_t evt_cmd_err;
+	wordexp_t evt_cmd_end;
 };
 
 extern void session_data_init (struct session_data *session_data);
