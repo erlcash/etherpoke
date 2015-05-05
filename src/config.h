@@ -20,17 +20,18 @@ struct config_filter
 	char *link_type;
 	uint32_t session_timeout;
 	uint8_t rfmon;
+	struct config_filter *next;
 };
 
 struct config
 {
-	struct config_filter *filter;
-	uint32_t filter_cnt;
+	struct config_filter *head;
+	struct config_filter *tail;
 };
 
-extern struct config* config_open (const char *filename, char *errbuf);
+extern int config_load (struct config *conf, const char *filename, char *errbuf);
 
-extern void config_close (struct config *conf);
+extern void config_unload (struct config *conf);
 
 #endif
 

@@ -146,165 +146,170 @@ filter_destroy (struct config_filter *filter)
 		free (filter->link_type);
 }
 
-struct config*
-config_open (const char *filename, char *errbuf)
+int
+config_load (struct config *conf, const char *filename, char *errbuf)
 {
-	// libconfig structure
 	config_t libconfig;
-	config_setting_t *root_setting, *filter_setting;
-	struct config *conf;
+	config_setting_t *root_setting;
+	config_setting_t *filter_setting;
+	struct config_filter *filter;
 	const char *str_val;
 	int i, filter_cnt, num;
 
 	config_init (&libconfig);
-	
+
 	if ( config_read_file (&libconfig, filename) == CONFIG_FALSE ){
 		snprintf (errbuf, CONF_ERRBUF_SIZE, "%s on line %d", config_error_text (&libconfig), config_error_line (&libconfig));
 		config_destroy (&libconfig);
-		return NULL;
+		return -1;
 	}
 
 	root_setting = config_root_setting (&libconfig);
 	filter_cnt = config_setting_length (root_setting);
 
-	if ( filter_cnt == 0 ){
-		snprintf (errbuf, CONF_ERRBUF_SIZE, "no packet capture filters specified");
-		config_destroy (&libconfig);
-		return NULL;
-	}
-	
-	conf = (struct config*) malloc (sizeof (struct config));
-	
-	if ( conf == NULL ){
-		config_destroy (&libconfig);
-		return NULL;
-	}
-	
-	memset (conf, 0, sizeof (struct config));
 	memset (errbuf, 0, sizeof (CONF_ERRBUF_SIZE));
 
-	conf->filter_cnt = filter_cnt;
-	conf->filter = (struct config_filter*) malloc (sizeof (struct config_filter) * filter_cnt);
-	
-	if ( conf->filter == NULL ){
-		config_close (conf);
-		config_destroy (&libconfig);
-		return NULL;
-	}
+	for ( i = 0; i < filter_cnt; i++ ){
+		filter = (struct config_filter*) calloc (1, sizeof (struct config_filter));
 
-	memset (conf->filter, 0, sizeof (struct config_filter) * filter_cnt);
+		if ( filter == NULL ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "cannot allocate memory for filter");
+			config_destroy (&libconfig);
+			return -1;
+		}
 
-	for ( i = 0; i < conf->filter_cnt; i++ ){
 		filter_setting = config_setting_get_elem (root_setting, i);
 
 		// Just in case... we do not want to touch the NULL pointer
-		if ( filter_setting == NULL )
-			break;
+		if ( filter_setting == NULL ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "not filters defined");
+			free (filter);
+			config_destroy (&libconfig);
+			return -1;
+		}
 
 		str_val = config_setting_name (filter_setting);
 
 		if ( str_val == NULL ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in %d. filter, missing filter name", i + 1);
-			config_close (conf);
+			free (filter);
+			config_unload (conf);
 			config_destroy (&libconfig);
-			return NULL;
+			return -1;
 		}
 
-		filter_set_name (&(conf->filter[i]), str_val);
+		filter_set_name (filter, str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "match", &str_val) == CONFIG_FALSE ){
 			str_val = NULL;
 		}
 
-		filter_set_matchrule (&(conf->filter[i]), str_val);
+		filter_set_matchrule (filter, str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "session_begin", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_begin'", conf->filter[i].name);
-			config_close (conf);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_begin'", filter->name);
+			free (filter);
+			config_unload (conf);
 			config_destroy (&libconfig);
-			return NULL;
+			return -1;
 		}
 	
-		filter_set_event (&(conf->filter[i]), str_val, SE_BEG);
+		filter_set_event (filter, str_val, SE_BEG);
 	
 		if ( config_setting_lookup_string (filter_setting, "session_end", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_end'", conf->filter[i].name);
-			config_close (conf);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_end'", filter->name);
+			free (filter);
+			config_unload (conf);
 			config_destroy (&libconfig);
-			return NULL;
+			return -1;
 		}
 	
-		filter_set_event (&(conf->filter[i]), str_val, SE_END);
+		filter_set_event (filter, str_val, SE_END);
 
 		if ( config_setting_lookup_string (filter_setting, "session_error", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_error'", conf->filter[i].name);
-			config_close (conf);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_error'", filter->name);
+			free (filter);
+			config_unload (conf);
 			config_destroy (&libconfig);
-			return NULL;
+			return -1;
 		}
 
-		filter_set_event (&(conf->filter[i]), str_val, SE_ERR);
+		filter_set_event (filter, str_val, SE_ERR);
 	
 		if ( config_setting_lookup_int (filter_setting, "session_timeout", &num) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_timeout'", conf->filter[i].name);
-			config_close (conf);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_timeout'", filter->name);
+			free (filter);
+			config_unload (conf);
 			config_destroy (&libconfig);
-			return NULL;
+			return -1;
 		}
 
 		if ( num == 0 ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', zero 'session_timeout' is not allowed", conf->filter[i].name);
-			config_close (conf);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', zero 'session_timeout' is not allowed", filter->name);
+			free (filter);
+			config_unload (conf);
 			config_destroy (&libconfig);
-			return NULL;
+			return -1;
 		}
 	
-		filter_set_session_timeout (&(conf->filter[i]), ((num < 0)? (num * -1):num));
+		filter_set_session_timeout (filter, ((num < 0)? (num * -1):num));
 
 		if ( config_setting_lookup_bool (filter_setting, "monitor_mode", &num) == CONFIG_FALSE ){
 			num = 0;
 		}
 
-		filter_set_monitor_mode (&(conf->filter[i]), num);
+		filter_set_monitor_mode (filter, num);
 
 		if ( config_setting_lookup_string (filter_setting, "interface", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'interface'", conf->filter[i].name);
-			config_close (conf);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'interface'", filter->name);
+			free (filter);
+			config_unload (conf);
 			config_destroy (&libconfig);
-			return NULL;
+			return -1;
 		}
 
 		if ( strlen (str_val) == 0 ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', empty option 'interface'", conf->filter[i].name);
-			config_close (conf);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', empty option 'interface'", filter->name);
+			free (filter);
+			config_unload (conf);
 			config_destroy (&libconfig);
-			return NULL;
+			return -1;
 		}
 
-		filter_set_interface (&(conf->filter[i]), str_val);
+		filter_set_interface (filter, str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "link_type", &str_val) == CONFIG_FALSE ){
 			str_val = NULL;
 		}
 
-		filter_set_link_type (&(conf->filter[i]), str_val);
+		filter_set_link_type (filter, str_val);
+
+		if ( conf->head == NULL ){
+			conf->head = filter;
+			conf->tail = conf->head;
+		} else {
+			conf->tail->next = filter;
+			conf->tail = filter;
+		}
 	}
-	
+
 	config_destroy (&libconfig); // destroy libconfig object
-	
-	return conf;
+
+	return filter_cnt;
 }
 
 void
-config_close (struct config *conf)
+config_unload (struct config *conf)
 {
-	int i;
-	
-	for ( i = 0; i < conf->filter_cnt; i++ )
-		filter_destroy (&(conf->filter[i]));
-	
-	free (conf->filter);
+	struct config_filter *filter, *filter_next;
 
-	free (conf);
+	filter = conf->head;
+
+	while ( filter != NULL ){
+		filter_next = filter->next;
+		filter_destroy (filter);
+		free (filter);
+		filter = filter_next;
+	}
 }
 
