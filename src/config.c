@@ -128,6 +128,12 @@ filter_set_link_type (struct config_filter *filter, const char *link_type)
 }
 
 static void
+filter_set_notify (struct config_filter *filter, uint8_t notify_type)
+{
+	filter->notify |= notify_type;
+}
+
+static void
 filter_destroy (struct config_filter *filter)
 {
 	if ( filter->name != NULL )
@@ -283,6 +289,23 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 		}
 
 		filter_set_link_type (filter, str_val);
+
+		if ( config_setting_lookup_bool (filter_setting, "notify_exec", &num) == CONFIG_FALSE ){
+			// If options not specified, enable it by default
+			num = NOTIFY_EXEC;
+		} else {
+			num = (num)? NOTIFY_EXEC:0;
+		}
+
+		filter_set_notify (filter, num);
+
+		if ( config_setting_lookup_bool (filter_setting, "notify_sock", &num) == CONFIG_FALSE ){
+			num = 0;
+		} else {
+			num = (num)? NOTIFY_SOCK:0;
+		}
+
+		filter_set_notify (filter, num);
 
 		if ( conf->head == NULL ){
 			conf->head = filter;

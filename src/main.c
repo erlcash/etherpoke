@@ -26,8 +26,8 @@
 
 struct option_data
 {
-	int daemon;
-	int port;
+	uint8_t daemon;
+	uint16_t port;
 };
 
 static int main_loop;
@@ -95,9 +95,13 @@ main (int argc, char *argv[])
 				break;
 
 			case 'l':
-				// TODO: convert string to int!
-				opt.port = 0;
-				fprintf (stderr, "listen %u\n", 0);
+				sscanf (optarg, "%hu", &(opt.port));
+
+				if ( opt.port == 0 ){
+					fprintf (stderr, "%s: invalid port number\n", argv[0]);
+					exitno = EXIT_FAILURE;
+					goto cleanup;
+				}
 				break;
 
 			case 'h':
@@ -167,34 +171,36 @@ main (int argc, char *argv[])
 
 		session_data_init (&(pcap_session[i]));
 
-		rval = wordexp (filter_iter->session_begin, &(pcap_session[i].evt_cmd_beg), WORDEXP_FLAGS);
+		if ( filter_iter->notify & NOTIFY_EXEC ){
+			rval = wordexp (filter_iter->session_begin, &(pcap_session[i].evt_cmd_beg), WORDEXP_FLAGS);
 
-		if ( rval == 0 )
-			rval = wordexp (filter_iter->session_error, &(pcap_session[i].evt_cmd_err), WORDEXP_FLAGS);
+			if ( rval == 0 )
+				rval = wordexp (filter_iter->session_error, &(pcap_session[i].evt_cmd_err), WORDEXP_FLAGS);
 
-		if ( rval == 0 )
-			rval = wordexp (filter_iter->session_end, &(pcap_session[i].evt_cmd_end), WORDEXP_FLAGS);
+			if ( rval == 0 )
+				rval = wordexp (filter_iter->session_end, &(pcap_session[i].evt_cmd_end), WORDEXP_FLAGS);
 
-		switch ( rval ){
-			case WRDE_SYNTAX:
-				fprintf (stderr, "%s: invalid event hook in '%s': syntax error\n", argv[0], filter_iter->name);
-				exitno = EXIT_FAILURE;
-				goto cleanup;
+			switch ( rval ){
+				case WRDE_SYNTAX:
+					fprintf (stderr, "%s: invalid event hook in '%s': syntax error\n", argv[0], filter_iter->name);
+					exitno = EXIT_FAILURE;
+					goto cleanup;
 
-			case WRDE_BADCHAR:
-				fprintf (stderr, "%s: invalid event hook in '%s': bad character\n", argv[0], filter_iter->name);
-				exitno = EXIT_FAILURE;
-				goto cleanup;
+				case WRDE_BADCHAR:
+					fprintf (stderr, "%s: invalid event hook in '%s': bad character\n", argv[0], filter_iter->name);
+					exitno = EXIT_FAILURE;
+					goto cleanup;
 
-			case WRDE_BADVAL:
-				fprintf (stderr, "%s: invalid event hook in '%s': referencing undefined variable\n", argv[0], filter_iter->name);
-				exitno = EXIT_FAILURE;
-				goto cleanup;
+				case WRDE_BADVAL:
+					fprintf (stderr, "%s: invalid event hook in '%s': referencing undefined variable\n", argv[0], filter_iter->name);
+					exitno = EXIT_FAILURE;
+					goto cleanup;
 
-			case WRDE_NOSPACE:
-				fprintf (stderr, "%s: cannot expand event hook string in '%s': out of memory\n", argv[0], filter_iter->name);
-				exitno = EXIT_FAILURE;
-				goto cleanup;
+				case WRDE_NOSPACE:
+					fprintf (stderr, "%s: cannot expand event hook string in '%s': out of memory\n", argv[0], filter_iter->name);
+					exitno = EXIT_FAILURE;
+					goto cleanup;
+			}
 		}
 
 		pcap_session[i].handle = pcap_create (filter_iter->interface, pcap_errbuff);
@@ -445,26 +451,27 @@ main (int argc, char *argv[])
 			if ( cmd_exp == NULL )
 				continue;
 
-			pid = fork ();
+			if ( filter_iter->notify & NOTIFY_EXEC ){
+				pid = fork ();
 
-			if ( pid == -1 ){
-				syslog (LOG_ERR, "cannot fork the process: %s", strerror (errno));
-				main_loop = 0;
-				break;
+				if ( pid == -1 ){
+					syslog (LOG_ERR, "cannot fork the process: %s", strerror (errno));
+					main_loop = 0;
+					break;
+				}
+
+				// Parent process, carry on...
+				if ( pid > 0 )
+					continue;
+
+				errno = 0;
+				rval = execv (cmd_exp->we_wordv[0], cmd_exp->we_wordv);
+
+				if ( rval == -1 )
+					syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", filter_iter->name, strerror (errno));
+
+				goto cleanup;
 			}
-
-			// Parent process, carry on...
-			if ( pid > 0 )
-				continue;
-
-			errno = 0;
-			rval = execv (cmd_exp->we_wordv[0], cmd_exp->we_wordv);
-
-			if ( rval == -1 )
-				syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", filter_iter->name, strerror (errno));
-
-			main_loop = 0;
-			break;
 		}
 	}
 

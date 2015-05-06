@@ -9,6 +9,12 @@
 
 #define CONF_ERRBUF_SIZE 256
 
+enum
+{
+	NOTIFY_EXEC = 0x01,
+	NOTIFY_SOCK = 0x02
+};
+
 struct config_filter
 {
 	char *name;
@@ -20,6 +26,7 @@ struct config_filter
 	char *link_type;
 	uint32_t session_timeout;
 	uint8_t rfmon;
+	uint8_t notify;
 	struct config_filter *next;
 };
 
