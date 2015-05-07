@@ -15,6 +15,7 @@ sock_open (int domain)
 	int sock;
 	int type;
 	int proto;
+	int opt_val;
 
 	switch ( domain ){
 		case AF_INET:
@@ -33,6 +34,14 @@ sock_open (int domain)
 	}
 
 	sock = socket (domain, type | SOCK_NONBLOCK, proto);
+
+	if ( sock == -1 )
+		return -1;
+
+	opt_val = 1;
+
+	if ( setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof (opt_val)) == -1 )
+		return -1;
 
 	return sock;
 }
