@@ -11,7 +11,5 @@ extern int sock_open (int domain);
 
 extern int sock_listen (int sock, const char *addr, uint16_t port);
 
-extern int sock_accept (int sock, struct sockaddr_in *addr);
-
 #endif
 

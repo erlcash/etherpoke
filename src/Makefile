@@ -18,7 +18,7 @@ uninstall:
 clean:
 	rm -f *.o $(NAME)
 
-$(NAME): main.o config.o session_data.o sock.o sock_list.o
+$(NAME): main.o config.o session_data.o sock.o
 	$(CC) $(CFLAGS) $^ -o $(NAME) -lpcap -lconfig
 
 main.o: main.c
@@ -31,8 +31,5 @@ session_data.o: session_data.c session_data.h
 	$(CC) $(CFLAGS) -c $<
 
 sock.o: sock.c sock.h
-	$(CC) $(CFLAGS) -c $<
-
-sock_list.o: sock_list.c sock_list.h
 	$(CC) $(CFLAGS) -c $<
 

@@ -84,13 +84,3 @@ sock_listen (int sock, const char *addr, uint16_t port)
 	return sock;
 }
 
-int
-sock_accept (int sock, struct sockaddr_in *addr)
-{
-	socklen_t sock_addr_len;
-
-	sock_addr_len = sizeof (struct sockaddr_in);
-
-	return accept (sock, (struct sockaddr*) addr, &sock_addr_len);
-}
-
