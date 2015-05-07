@@ -41,7 +41,7 @@ static int exitno;
 static void
 etherpoke_help (const char *p)
 {
-	fprintf (stdout, "Usage: %s [OPTIONS] <FILE>...\n\n"
+	fprintf (stdout, "Usage: %s [OPTIONS] <FILE>\n\n"
 					 "Options:\n"
 					 "  -d, --daemon          run as a daemon\n"
 					 "  -l, --listen=NUM      TCP port to use for inbound client connections\n"
@@ -150,23 +150,15 @@ main (int argc, char *argv[])
 	}
 
 	//
-	// Load configuration files
+	// Load configuration file
 	//
-	filter_cnt = 0;
+	filter_cnt = config_load (&etherpoke_conf, argv[optind], conf_errbuff);
 
-	for ( opt_index = optind; opt_index < argc; opt_index++ ){
-		rval = config_load (&etherpoke_conf, argv[opt_index], conf_errbuff);
-
-		if ( rval == -1 ){
-			fprintf (stderr, "%s: cannot load configuration file '%s': %s\n", argv[0], argv[opt_index], conf_errbuff);
-			exitno = EXIT_FAILURE;
-			goto cleanup;
-		}
-
-		filter_cnt += rval;
-	}
-
-	if ( filter_cnt == 0 ){
+	if ( filter_cnt == -1 ){
+		fprintf (stderr, "%s: cannot load configuration file '%s': %s\n", argv[0], argv[optind], conf_errbuff);
+		exitno = EXIT_FAILURE;
+		goto cleanup;
+	} else	if ( filter_cnt == 0 ){
 		fprintf (stderr, "%s: nothing to do, no filters defined.\n", argv[0]);
 		exitno = EXIT_FAILURE;
 		goto cleanup;
