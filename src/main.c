@@ -9,6 +9,7 @@
 #include <pcap.h>
 #include <libconfig.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <poll.h>
 #include <getopt.h>
 #include <time.h>
@@ -19,8 +20,12 @@
 #include "config.h"
 #include "etherpoke.h"
 #include "session_data.h"
+#include "sock.h"
+#include "sock_list.h"
 
 #define SELECT_TIMEOUT_MS 700
+
+#define ACCEPT_MAX 32
 
 #define WORDEXP_FLAGS WRDE_UNDEF
 
@@ -28,6 +33,7 @@ struct option_data
 {
 	uint8_t daemon;
 	uint16_t port;
+	uint32_t accept_max;
 };
 
 static int main_loop;
@@ -38,10 +44,11 @@ etherpoke_help (const char *p)
 {
 	fprintf (stdout, "Usage: %s [OPTIONS] <FILE>...\n\n"
 					 "Options:\n"
-					 "  -d, --daemon       run as a daemon\n"
-					 "  -l, --listen=NUM   TCP port used for inbound client connections\n"
-					 "  -h, --help         show this usage information\n"
-					 "  -v, --version      show version information\n"
+					 "  -d, --daemon          run as a daemon\n"
+					 "  -l, --listen=NUM      TCP port to use for inbound client connections\n"
+					 "  -m, --accept-max=NUM  accept maximum NUM of concurrent client connections\n"
+					 "  -h, --help            show this usage information\n"
+					 "  -v, --version         show version information\n"
 					 , p);
 }
 
@@ -65,30 +72,34 @@ main (int argc, char *argv[])
 	struct config etherpoke_conf;
 	struct config_filter *filter_iter;
 	struct session_data *pcap_session;
+	struct sock_list client_list;
 	struct option_data opt;
 	char conf_errbuff[CONF_ERRBUF_SIZE];
 	char pcap_errbuff[PCAP_ERRBUF_SIZE];
-	int i, c, rval, syslog_flags, opt_index, filter_cnt;
 	struct sigaction sa;
 	pid_t pid;
+	int i, c, rval, syslog_flags, opt_index, filter_cnt, sock, poll_len;
 	struct option opt_long[] = {
 		{ "daemon", no_argument, 0, 'd' },
 		{ "listen", required_argument, 0, 'l' },
+		{ "accept-max", required_argument, 0, 'm' },
 		{ "help", no_argument, 0, 'h' },
 		{ "version", no_argument, 0, 'v' },
 		{ NULL, 0, 0, 0 }
 	};
 
-	memset (&opt, 0, sizeof (struct option_data));
-	memset (&etherpoke_conf, 0, sizeof (struct config));
-
+	sock = -1;
 	poll_fd = NULL;
 	pcap_session = NULL;
-
 	exitno = EXIT_SUCCESS;
 	syslog_flags = LOG_PID | LOG_PERROR;
 
-	while ( (c = getopt_long (argc, argv, "dl:hv", opt_long, &opt_index)) != -1 ){
+	memset (&opt, 0, sizeof (struct option_data));
+	memset (&etherpoke_conf, 0, sizeof (struct config));
+
+	sock_list_init (&client_list);
+
+	while ( (c = getopt_long (argc, argv, "dl:m:hv", opt_long, &opt_index)) != -1 ){
 		switch ( c ){
 			case 'd':
 				opt.daemon = 1;
@@ -99,6 +110,16 @@ main (int argc, char *argv[])
 
 				if ( opt.port == 0 ){
 					fprintf (stderr, "%s: invalid port number\n", argv[0]);
+					exitno = EXIT_FAILURE;
+					goto cleanup;
+				}
+				break;
+
+			case 'm':
+				sscanf (optarg, "%u", &(opt.accept_max));
+
+				if ( opt.accept_max == 0 ){
+					fprintf (stderr, "%s: invalid number for maximum connections\n", argv[0]);
 					exitno = EXIT_FAILURE;
 					goto cleanup;
 				}
@@ -120,6 +141,9 @@ main (int argc, char *argv[])
 				goto cleanup;
 		}
 	}
+
+	if ( opt.accept_max == 0 )
+		opt.accept_max = ACCEPT_MAX;
 
 	// Check if there are some non-option arguments, these are treated as paths
 	// to configuration files.
@@ -152,17 +176,37 @@ main (int argc, char *argv[])
 	pcap_session = (struct session_data*) calloc (filter_cnt, sizeof (struct session_data));
 
 	if ( pcap_session == NULL ){
-		fprintf (stderr, "%s: cannot allocate memory for packet capture.\n", argv[0]);
+		fprintf (stderr, "%s: cannot allocate memory: %s\n", argv[0], strerror (errno));
 		exitno = EXIT_FAILURE;
 		goto cleanup;
 	}
 
-	poll_fd = (struct pollfd*) malloc (sizeof (struct pollfd) * filter_cnt);
+	poll_len = filter_cnt + 1;
+
+	poll_fd = (struct pollfd*) malloc (sizeof (struct pollfd) * poll_len);
 
 	if ( poll_fd == NULL ){
-		fprintf (stderr, "%s: cannot allocate memory for file descriptor array.\n", argv[0]);
+		fprintf (stderr, "%s: cannot allocate memory: %s\n", argv[0], strerror (errno));
 		exitno = EXIT_FAILURE;
 		goto cleanup;
+	}
+
+	if ( opt.port ){
+		sock = sock_open (AF_INET);
+
+		if ( sock == -1 ){
+			fprintf (stderr, "%s: cannot create socket: %s\n", argv[0], strerror (errno));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
+		rval = sock_listen (sock, "0.0.0.0", opt.port);
+
+		if ( rval == -1 ){
+			fprintf (stderr, "%s: cannot open port %u for listening: %s\n", argv[0], opt.port, strerror (errno));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
 	}
 
 	for ( i = 0, filter_iter = etherpoke_conf.head; filter_iter != NULL; i++, filter_iter = filter_iter->next ){
@@ -334,7 +378,7 @@ main (int argc, char *argv[])
 		exitno = EXIT_FAILURE;
 		goto cleanup;
 	}
-	
+
 	//
 	// Daemonize the process if the flag was set
 	//
@@ -372,11 +416,16 @@ main (int argc, char *argv[])
 		syslog_flags = LOG_PID;
 	}
 
-	// Populate poll structure
+	// Populate poll structure with pcap file descriptors...
 	for ( i = 0; i < filter_cnt; i++ ){
 		poll_fd[i].fd = pcap_session[i].fd;
 		poll_fd[i].events = POLLIN | POLLERR;
+		poll_fd[i].revents = 0;
 	}
+	// ... and don't forget on listening socket.
+	poll_fd[poll_len - 1].fd = sock;
+	poll_fd[poll_len - 1].events = POLLIN | POLLERR;
+	poll_fd[poll_len - 1].revents = 0;
 
 	openlog ("etherpoke", syslog_flags, LOG_DAEMON);
 
@@ -389,10 +438,11 @@ main (int argc, char *argv[])
 		const u_char *pkt_data;
 		struct pcap_pkthdr *pkt_header;
 		time_t current_time;
+		const char *cmd;
 		wordexp_t *cmd_exp;
 
 		errno = 0;
-		rval = poll (poll_fd, filter_cnt, SELECT_TIMEOUT_MS);
+		rval = poll (poll_fd, poll_len, SELECT_TIMEOUT_MS);
 
 		if ( rval == -1 ){
 			if ( errno == EINTR )
@@ -400,6 +450,35 @@ main (int argc, char *argv[])
 
 			syslog (LOG_ERR, "poll system call failed: %s", strerror (errno));
 			break;
+		}
+
+		// Accept incoming connection
+		if ( poll_fd[poll_len - 1].revents & POLLIN ){
+			struct sock_data *sock_data;
+
+			sock_data = (struct sock_data*) malloc (sizeof (struct sock_data));
+
+			if ( sock_data == NULL ){
+				syslog (LOG_ERR, "cannot allocate memory: %s", strerror (errno));
+				exitno = EXIT_FAILURE;
+				goto cleanup;
+			}
+
+			sock_data->sd = sock_accept (sock, &(sock_data->addr));
+
+			if ( sock_data->sd == -1 ){
+				syslog (LOG_ERR, "cannot accept new connection: %s", strerror (errno));
+				exitno = EXIT_FAILURE;
+				goto cleanup;		
+			}
+
+			sock_data->prev = NULL;
+			sock_data->next = NULL;
+
+			sock_list_add (&client_list, sock_data);
+
+		} else if ( poll_fd[poll_len - 1].revents & POLLERR ){
+			// TODO: do something!!
 		}
 
 		time (&current_time);
@@ -424,17 +503,17 @@ main (int argc, char *argv[])
 				pcap_session[i].evt.type = SE_END;
 			}
 
-			cmd_exp = NULL;
-
 			switch ( pcap_session[i].evt.type ){
 				case SE_BEG:
 					syslog (LOG_INFO, "SESSION_BEGIN %s", filter_iter->name);
+					cmd = filter_iter->session_begin;
 					cmd_exp = &(pcap_session[i].evt_cmd_beg);
 					pcap_session[i].evt.type = SE_NUL;
 					break;
 
 				case SE_END:
 					syslog (LOG_INFO, "SESSION_END %s", filter_iter->name);
+					cmd = filter_iter->session_end;
 					cmd_exp = &(pcap_session[i].evt_cmd_end);
 					pcap_session[i].evt.type = SE_NUL;
 					pcap_session[i].evt.ts = 0;
@@ -442,14 +521,32 @@ main (int argc, char *argv[])
 
 				case SE_ERR:
 					syslog (LOG_INFO, "SESSION_ERROR %s", filter_iter->name);
+					cmd = filter_iter->session_error;
 					cmd_exp = &(pcap_session[i].evt_cmd_err);
 					pcap_session[i].evt.type = SE_NUL;
 					pcap_session[i].evt.ts = 0;
+					break;
+
+				default:
+					cmd_exp = NULL;
 					break;
 			}
 
 			if ( cmd_exp == NULL )
 				continue;
+
+			if ( filter_iter->notify & NOTIFY_SOCK ){
+				struct sock_data *sock_data;
+
+				for ( sock_data = client_list.head; sock_data != NULL; sock_data = sock_data->next ){
+					rval = send (sock_data->sd, cmd, strlen (cmd) + 1, MSG_NOSIGNAL);
+
+					if ( rval == -1 ){
+						syslog (LOG_WARNING, "cannot send notification: %s", strerror (errno));
+						sock_list_del (&client_list, sock_data);
+					}
+				}
+			}
 
 			if ( filter_iter->notify & NOTIFY_EXEC ){
 				pid = fork ();
@@ -484,6 +581,11 @@ cleanup:
 
 	if ( poll_fd != NULL )
 		free (poll_fd);
+
+	if ( sock != -1 )
+		close (sock);
+
+	sock_list_free (&client_list);
 
 	config_unload (&etherpoke_conf);
 

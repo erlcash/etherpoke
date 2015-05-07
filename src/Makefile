@@ -2,13 +2,23 @@ CC = gcc
 CFLAGS = -std=gnu99 -O2 -pedantic -Wall -ggdb
 
 NAME = etherpoke
-INSTALL_DIR = /usr/local/bin
+INSTALL_DIR = /usr/local/sbin
 
 .PHONY: clean install
 
 all: $(NAME)
 
-$(NAME): main.o config.o session_data.o
+install: $(NAME)
+	install --mode 755 $(NAME) $(INSTALL_DIR)
+	setcap cap_net_raw,cap_net_admin=eip $(INSTALL_DIR)/$(NAME)
+
+uninstall:
+	rm -f $(INSTALL_DIR)/$(NAME)
+
+clean:
+	rm -f *.o $(NAME)
+
+$(NAME): main.o config.o session_data.o sock.o sock_list.o
 	$(CC) $(CFLAGS) $^ -o $(NAME) -lpcap -lconfig
 
 main.o: main.c
@@ -20,9 +30,9 @@ config.o: config.c config.h
 session_data.o: session_data.c session_data.h
 	$(CC) $(CFLAGS) -c $<
 
-install: $(NAME)
-	install -m 755 $(NAME) $(INSTALL_DIR)
+sock.o: sock.c sock.h
+	$(CC) $(CFLAGS) -c $<
 
-clean:
-	rm -f *.o $(NAME)
+sock_list.o: sock_list.c sock_list.h
+	$(CC) $(CFLAGS) -c $<
 
