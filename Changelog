@@ -1,4 +1,32 @@
+version 2.3.0
+-------------
+
+* Support for sockets (TCP/UNIX domain) as an alternative to execv(3). If this
+mode is enabled, event hooks are sent via socket instead of being executed
+localy. This feature allows remote systems to be notified immediately after
+event occurs without unnecessary overhead.
+
+* New configuration options 'notify_sock', 'notify_exec'. If set to true,
+'notify_sock' sends notification message (FILTER_NAME:EVT) to all connected
+clients via TCP socket (configured with option '-l' on program's invocation),
+'notify_exec' executes content of event hooks. Both options can be set
+simultaneously. By default socket notification is disabled.
+
+* Command-line option names has been changed, long options are supported.
+
+* Running `make install` not only copies compiled binary into target directory
+but it also sets file capabilities with `setcap`. This allows to run the
+binary without root privileges.
+
+* New option '-m' (--accept-max) which overrides default value for maximum
+number of concurrent client connections on socket.
+
+* Working directory is set to match directory name where configuration file is
+located. This allows to use @include statement in the configuration file
+referencing included files by their relative path.
+
 version 2.2.1
+-------------
 
 * Carry out the command expansion only once for each event, at program start.
 
