@@ -10,7 +10,7 @@ all: $(NAME)
 
 install: $(NAME)
 	install --mode 755 $(NAME) $(INSTALL_DIR)
-	setcap cap_net_raw,cap_net_admin=eip $(INSTALL_DIR)/$(NAME)
+	#setcap cap_net_raw,cap_net_admin=eip $(INSTALL_DIR)/$(NAME)
 
 uninstall:
 	rm -f $(INSTALL_DIR)/$(NAME)
