@@ -75,7 +75,7 @@ main (int argc, char *argv[])
 	struct option_data opt;
 	char conf_errbuff[CONF_ERRBUF_SIZE];
 	char pcap_errbuff[PCAP_ERRBUF_SIZE];
-	char *dirname_config;
+	char *dirname_config, *path_config;
 	struct sigaction sa;
 	pid_t pid;
 	int i, c, j, rval, syslog_flags, opt_index, filter_cnt, sock, poll_len;
@@ -151,6 +151,23 @@ main (int argc, char *argv[])
 		goto cleanup;
 	}
 
+	// Change working directory to match the dirname of the config file.  In
+	// some implementations dirname may change input string hence the copy in
+	// path_config.
+	path_config = strdup (argv[optind]);
+
+	dirname_config = dirname (path_config);
+
+	rval = chdir (dirname_config);
+
+	if ( rval == -1 ){
+		fprintf (stderr, "%s: cannot change working directory to '%s': %s\n", argv[0], dirname_config, strerror (errno));
+		exitno = EXIT_FAILURE;
+		goto cleanup;
+	}
+
+	free (path_config);
+
 	//
 	// Load configuration file
 	//
@@ -162,19 +179,6 @@ main (int argc, char *argv[])
 		goto cleanup;
 	} else	if ( filter_cnt == 0 ){
 		fprintf (stderr, "%s: nothing to do, no filters defined.\n", argv[0]);
-		exitno = EXIT_FAILURE;
-		goto cleanup;
-	}
-
-	// Change working directory to match the dirname of the config file
-	dirname_config = dirname (argv[optind]);
-
-	fprintf (stderr, "dirname %s\n", dirname_config);
-
-	rval = chdir (dirname_config);
-
-	if ( rval == -1 ){
-		fprintf (stderr, "%s: cannot change working directory: %s\n", argv[0], strerror (errno));
 		exitno = EXIT_FAILURE;
 		goto cleanup;
 	}
