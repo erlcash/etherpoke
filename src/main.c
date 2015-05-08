@@ -15,6 +15,7 @@
 #include <time.h>
 #include <syslog.h>
 #include <wordexp.h>
+#include <libgen.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -74,6 +75,7 @@ main (int argc, char *argv[])
 	struct option_data opt;
 	char conf_errbuff[CONF_ERRBUF_SIZE];
 	char pcap_errbuff[PCAP_ERRBUF_SIZE];
+	char *dirname_config;
 	struct sigaction sa;
 	pid_t pid;
 	int i, c, j, rval, syslog_flags, opt_index, filter_cnt, sock, poll_len;
@@ -160,6 +162,19 @@ main (int argc, char *argv[])
 		goto cleanup;
 	} else	if ( filter_cnt == 0 ){
 		fprintf (stderr, "%s: nothing to do, no filters defined.\n", argv[0]);
+		exitno = EXIT_FAILURE;
+		goto cleanup;
+	}
+
+	// Change working directory to match the dirname of the config file
+	dirname_config = dirname (argv[optind]);
+
+	fprintf (stderr, "dirname %s\n", dirname_config);
+
+	rval = chdir (dirname_config);
+
+	if ( rval == -1 ){
+		fprintf (stderr, "%s: cannot change working directory: %s\n", argv[0], strerror (errno));
 		exitno = EXIT_FAILURE;
 		goto cleanup;
 	}
@@ -395,7 +410,7 @@ main (int argc, char *argv[])
 	//
 	if ( opt.daemon == 1 ){
 		pid = fork ();
-		
+
 		if ( pid > 0 ){
 			exitno = EXIT_SUCCESS;
 			goto cleanup;
@@ -404,22 +419,14 @@ main (int argc, char *argv[])
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
-		
+
 		if ( setsid () == -1 ){
 			fprintf (stderr, "%s: cannot daemonize the process (setsid failed).\n", argv[0]);
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
-		
+
 		umask (0);
-
-		rval = chdir ("/");
-
-		if ( rval == -1 ){
-			fprintf (stderr, "%s: cannot change working directory: %s\n", argv[0], strerror (errno));
-			exitno = EXIT_FAILURE;
-			goto cleanup;
-		}
 
 		fclose (stdin);
 		fclose (stdout);
@@ -454,7 +461,7 @@ main (int argc, char *argv[])
 		if ( poll_fd[filter_cnt].revents & POLLIN ){
 			int sock_new;
 
-			fprintf (stderr, "incoming connection...\n");
+			syslog (LOG_INFO, "incoming connection");
 
 			sock_new = accept (sock, NULL, NULL);
 
@@ -485,7 +492,6 @@ main (int argc, char *argv[])
 			if ( (poll_fd[i].revents & POLLIN) || (poll_fd[i].revents & POLLERR) ){
 				char nok[128];
 
-				fprintf (stderr, "incoming client data\n");
 				rval = recv (poll_fd[i].fd, &nok, sizeof (nok), 0);
 
 				if ( rval <= 0 ){
