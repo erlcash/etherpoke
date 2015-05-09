@@ -370,14 +370,15 @@ main (int argc, char *argv[])
 		goto cleanup;
 	}
 
-	// Populate poll structure with pcap file descriptors...
-	// ... listening socket...
-	// ... invalid file descriptors so that poll ignores them.
+	// Populate poll structure...
 	for ( i = 0; i < poll_len; i++ ){
+		// ... with pcap file descriptors...
 		if ( i < filter_cnt )
 			poll_fd[i].fd = pcap_session[i].fd;
+		// ... listening socket...
 		else if ( i == filter_cnt )
 			poll_fd[i].fd = sock;
+		// ... invalid file descriptors (to be ignored by poll)...
 		else
 			poll_fd[i].fd = -1;
 
@@ -432,9 +433,9 @@ main (int argc, char *argv[])
 
 		umask (0);
 
-		fclose (stdin);
-		fclose (stdout);
-		fclose (stderr);
+		freopen ("/dev/null", "r", stdin);
+		freopen ("/dev/null", "w", stdout);
+		freopen ("/dev/null", "w", stderr);
 		syslog_flags = LOG_PID;
 	}
 
