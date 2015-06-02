@@ -511,7 +511,7 @@ main (int argc, char *argv[])
 
 		for ( i = 0, filter_iter = etherpoke_conf.head; filter_iter != NULL; i++, filter_iter = filter_iter->next ){
 			wordexp_t *cmd_exp;
-			int evt;
+			const char *evt_str;
 
 			// Handle incoming packet
 			if ( (poll_fd[i].revents & POLLIN) || (poll_fd[i].revents & POLLERR) ){
@@ -532,25 +532,22 @@ main (int argc, char *argv[])
 				pcap_session[i].evt.type = SE_END;
 			}
 
-			// Store a copy of the event before it is discarded
-			evt = pcap_session[i].evt.type;
-
 			switch ( pcap_session[i].evt.type ){
 				case SE_BEG:
-					syslog (LOG_INFO, "SESSION_BEGIN %s", filter_iter->name);
+					evt_str = "BEG";
 					cmd_exp = &(pcap_session[i].evt_cmd_beg);
 					pcap_session[i].evt.type = SE_NUL;
 					break;
 
 				case SE_END:
-					syslog (LOG_INFO, "SESSION_END %s", filter_iter->name);
 					cmd_exp = &(pcap_session[i].evt_cmd_end);
+					evt_str = "END";
 					pcap_session[i].evt.type = SE_NUL;
 					pcap_session[i].evt.ts = 0;
 					break;
 
 				case SE_ERR:
-					syslog (LOG_INFO, "SESSION_ERROR %s", filter_iter->name);
+					evt_str = "ERR";
 					cmd_exp = &(pcap_session[i].evt_cmd_err);
 					pcap_session[i].evt.type = SE_NUL;
 					pcap_session[i].evt.ts = 0;
@@ -558,31 +555,16 @@ main (int argc, char *argv[])
 
 				default:
 					cmd_exp = NULL;
+					evt_str = NULL;
 					break;
 			}
 
+			if ( evt_str != NULL )
+				syslog (LOG_INFO, "%s:%s", filter_iter->name, evt_str);
+
 			// Send socket notification
 			if ( filter_iter->notify & NOTIFY_SOCK ){
-				const char *evt_str;
 				char msg[128];
-
-				switch ( evt ){
-					case SE_BEG:
-						evt_str = "BEG";
-						break;
-
-					case SE_END:
-						evt_str = "END";
-						break;
-
-					case SE_ERR:
-						evt_str = "ERR";
-						break;
-
-					default:
-						evt_str = NULL;
-						break;
-				}
 
 				if ( evt_str == NULL )
 					continue;
