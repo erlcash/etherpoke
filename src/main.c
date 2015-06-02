@@ -15,13 +15,13 @@
 #include <time.h>
 #include <syslog.h>
 #include <wordexp.h>
-#include <libgen.h>
 #include <unistd.h>
 
 #include "config.h"
 #include "etherpoke.h"
 #include "session_data.h"
 #include "sock.h"
+#include "pathname.h"
 
 #define SELECT_TIMEOUT_MS 700
 
@@ -75,7 +75,7 @@ main (int argc, char *argv[])
 	struct option_data opt;
 	char conf_errbuff[CONF_ERRBUF_SIZE];
 	char pcap_errbuff[PCAP_ERRBUF_SIZE];
-	char *dirname_config, *path_config;
+	struct pathname path_config;
 	struct sigaction sa;
 	pid_t pid;
 	int i, c, j, rval, syslog_flags, opt_index, filter_cnt, sock, poll_len;
@@ -95,6 +95,7 @@ main (int argc, char *argv[])
 	syslog_flags = LOG_PID | LOG_PERROR;
 
 	memset (&opt, 0, sizeof (struct option_data));
+	memset (&path_config, 0, sizeof (struct pathname));
 	memset (&etherpoke_conf, 0, sizeof (struct config));
 
 	while ( (c = getopt_long (argc, argv, "dl:m:hv", opt_long, &opt_index)) != -1 ){
@@ -151,27 +152,27 @@ main (int argc, char *argv[])
 		goto cleanup;
 	}
 
-	// Change working directory to match the dirname of the config file.  In
-	// some implementations dirname may change input string hence the copy in
-	// path_config.
-	path_config = strdup (argv[optind]);
+	// Change working directory to match the dirname of the config file.
+	rval = path_split (argv[optind], &path_config);
 
-	dirname_config = dirname (path_config);
-
-	rval = chdir (dirname_config);
-
-	if ( rval == -1 ){
-		fprintf (stderr, "%s: cannot change working directory to '%s': %s\n", argv[0], dirname_config, strerror (errno));
+	if ( rval != 0 ){
+		fprintf (stderr, "%s: cannot split path to configuration file.\n", argv[0]);
 		exitno = EXIT_FAILURE;
 		goto cleanup;
 	}
 
-	free (path_config);
+	rval = chdir (path_config.dir);
+
+	if ( rval == -1 ){
+		fprintf (stderr, "%s: cannot set working directory to '%s': %s\n", argv[0], path_config.dir, strerror (errno));
+		exitno = EXIT_FAILURE;
+		goto cleanup;
+	}
 
 	//
 	// Load configuration file
 	//
-	filter_cnt = config_load (&etherpoke_conf, argv[optind], conf_errbuff);
+	filter_cnt = config_load (&etherpoke_conf, path_config.base, conf_errbuff);
 
 	if ( filter_cnt == -1 ){
 		fprintf (stderr, "%s: cannot load configuration file '%s': %s\n", argv[0], argv[optind], conf_errbuff);
@@ -644,6 +645,8 @@ cleanup:
 		close (sock);
 
 	config_unload (&etherpoke_conf);
+
+	path_free (&path_config);
 
 	return exitno;
 }
