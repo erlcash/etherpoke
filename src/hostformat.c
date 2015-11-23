@@ -10,7 +10,7 @@ hostformat_parse (const char *str, char *hostname, int *port)
 	char *semicolon_pos, *invchar_pos;
 	size_t cpy_cnt;
 
-	semicolon_pos = strchr (str, ':');
+	semicolon_pos = strrchr (str, ':');
 
 	if ( semicolon_pos == NULL )
 		return -1;
