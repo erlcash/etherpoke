@@ -22,7 +22,7 @@ uninstall:
 clean:
 	rm -f *.o $(NAME)
 
-$(NAME): main.o config.o session_data.o sock.o pathname.o
+$(NAME): main.o config.o session_data.o sock.o pathname.o hostformat.o
 	$(CC) $(CFLAGS) $^ -o $(NAME) -lpcap -lconfig
 
 main.o: main.c
@@ -38,5 +38,8 @@ sock.o: sock.c sock.h
 	$(CC) $(CFLAGS) -c $<
 
 pathname.o: pathname.c pathname.h
+	$(CC) $(CFLAGS) -c $<
+
+hostformat.o: hostformat.c hostformat.h
 	$(CC) $(CFLAGS) -c $<
 
