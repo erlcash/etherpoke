@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <limits.h>
 #include <errno.h>
 #include <pcap.h>
 #include <libconfig.h>
@@ -22,6 +23,7 @@
 #include "session_data.h"
 #include "sock.h"
 #include "pathname.h"
+#include "hostformat.h"
 
 #define SELECT_TIMEOUT_MS 700
 
@@ -31,9 +33,10 @@
 
 struct option_data
 {
-	uint8_t daemon;
-	uint16_t port;
 	uint32_t accept_max;
+	uint32_t port;
+	char hostname[HOST_NAME_MAX];
+	uint8_t daemon;
 };
 
 static int main_loop;
@@ -44,11 +47,11 @@ etherpoke_help (const char *p)
 {
 	fprintf (stdout, "Usage: %s [OPTIONS] <FILE>\n\n"
 					 "Options:\n"
-					 "  -d, --daemon          run as a daemon\n"
-					 "  -l, --listen=NUM      TCP port to use for inbound client connections\n"
-					 "  -m, --accept-max=NUM  accept maximum NUM of concurrent client connections\n"
-					 "  -h, --help            show this usage information\n"
-					 "  -v, --version         show version information\n"
+					 "  -d, --daemon              run as a daemon\n"
+					 "  -t, --hostname=HOST:PORT  bind to address/hostname and port\n"
+					 "  -m, --accept-max=NUM      accept maximum of NUM concurrent client connections\n"
+					 "  -h, --help                show this usage information\n"
+					 "  -v, --version             show version information\n"
 					 , p);
 }
 
@@ -64,6 +67,7 @@ etherpoke_sigdie (int signo)
 	main_loop = 0;
 	exitno = signo;
 }
+
 
 int
 main (int argc, char *argv[])
@@ -81,7 +85,7 @@ main (int argc, char *argv[])
 	int i, c, j, rval, syslog_flags, opt_index, filter_cnt, sock, poll_len;
 	struct option opt_long[] = {
 		{ "daemon", no_argument, 0, 'd' },
-		{ "listen", required_argument, 0, 'l' },
+		{ "hostname", required_argument, 0, 't' },
 		{ "accept-max", required_argument, 0, 'm' },
 		{ "help", no_argument, 0, 'h' },
 		{ "version", no_argument, 0, 'v' },
@@ -98,14 +102,26 @@ main (int argc, char *argv[])
 	memset (&path_config, 0, sizeof (struct pathname));
 	memset (&etherpoke_conf, 0, sizeof (struct config));
 
-	while ( (c = getopt_long (argc, argv, "dl:m:hv", opt_long, &opt_index)) != -1 ){
+	while ( (c = getopt_long (argc, argv, "dt:m:hv", opt_long, &opt_index)) != -1 ){
 		switch ( c ){
 			case 'd':
 				opt.daemon = 1;
 				break;
 
-			case 'l':
-				sscanf (optarg, "%hu", &(opt.port));
+			case 't':
+				rval = hostformat_parse (optarg, opt.hostname, (int*) &(opt.port));
+
+				if ( rval == -1 ){
+					fprintf (stderr, "%s: invalid hostname format (expects HOSTNAME:PORT)\n", argv[0]);
+					exitno = EXIT_FAILURE;
+					goto cleanup;
+				}
+
+				if ( opt.port < 1 || opt.port > 65535 ){
+					fprintf (stderr, "%s: port out of range\n", argv[0]);
+					exitno = EXIT_FAILURE;
+					goto cleanup;
+				}
 
 				if ( opt.port == 0 ){
 					fprintf (stderr, "%s: invalid port number\n", argv[0]);
@@ -198,10 +214,10 @@ main (int argc, char *argv[])
 			goto cleanup;
 		}
 
-		rval = sock_listen (sock, "0.0.0.0", opt.port);
+		rval = sock_listen (sock, opt.hostname, opt.port);
 
 		if ( rval == -1 ){
-			fprintf (stderr, "%s: cannot open port %u for listening: %s\n", argv[0], opt.port, strerror (errno));
+			fprintf (stderr, "%s: binding on %s:%u failed: %s\n", argv[0], opt.hostname, opt.port, strerror (errno));
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
@@ -442,6 +458,11 @@ main (int argc, char *argv[])
 
 	openlog ("etherpoke", syslog_flags, LOG_DAEMON);
 
+	syslog (LOG_INFO, "Etherpoke started (loaded filters: %u)", filter_cnt);
+
+	if ( opt.port )
+		syslog (LOG_INFO, "Event notifications available via %s:%hu (ACCEPT_MAX: %u)", opt.hostname, opt.port, opt.accept_max);
+
 	//
 	// Main loop
 	//
@@ -459,15 +480,13 @@ main (int argc, char *argv[])
 			if ( errno == EINTR )
 				continue;
 
-			syslog (LOG_ERR, "poll system call failed: %s", strerror (errno));
+			syslog (LOG_ERR, "poll(2) failed: %s", strerror (errno));
 			break;
 		}
 
 		// Accept incoming connection
 		if ( poll_fd[filter_cnt].revents & POLLIN ){
 			int sock_new;
-
-			syslog (LOG_INFO, "incoming connection");
 
 			sock_new = accept (sock, NULL, NULL);
 
@@ -487,9 +506,11 @@ main (int argc, char *argv[])
 			}
 
 			if ( sock_new != -1 ){
-				syslog (LOG_INFO, "too many concurrent connections");
+				syslog (LOG_INFO, "connection refused: too many concurrent connections");
 				close (sock_new);
 			}
+
+			syslog (LOG_INFO, "Client connected...");
 		}
 
 		// Take care of incoming client data.  At this point only shutdown and
@@ -501,7 +522,7 @@ main (int argc, char *argv[])
 				rval = recv (poll_fd[i].fd, &nok, sizeof (nok), 0);
 
 				if ( rval <= 0 ){
-					syslog (LOG_INFO, "connection closed");
+					syslog (LOG_INFO, "Client disconnected...");
 					poll_fd[i].fd = -1;
 				}
 			}
@@ -613,7 +634,11 @@ main (int argc, char *argv[])
 		}
 	}
 
+	syslog (LOG_INFO, "Etherpoke shutdown (signal %u)", exitno);
+
 cleanup:
+	closelog ();
+
 	if ( pcap_session != NULL ){
 		for ( i = 0; i < filter_cnt; i++ )
 			session_data_free (&(pcap_session[i]));
