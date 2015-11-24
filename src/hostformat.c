@@ -1,13 +1,16 @@
+/*
+ * Copyright (c) 2013 - 2015, CodeWard.org
+ */
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <errno.h>
+
+#include "hostformat.h"
 
 int
-hostformat_parse (const char *str, char *hostname, int *port)
+hostformat_parse (const char *str, char *hostname, char *port)
 {
-	char *semicolon_pos, *invchar_pos;
+	char *semicolon_pos;
 	size_t cpy_cnt;
 
 	semicolon_pos = strrchr (str, ':');
@@ -23,13 +26,8 @@ hostformat_parse (const char *str, char *hostname, int *port)
 	strncpy (hostname, str, cpy_cnt);
 	hostname[cpy_cnt] = '\0';
 
-	errno = 0;
-	invchar_pos = NULL;
-
-	*port = strtol ((semicolon_pos + 1), &invchar_pos, 10);
-
-	if ( *port == 0 || *invchar_pos != '\0' || errno == ERANGE )
-		return -1;
+	strncpy (port, (semicolon_pos + 1), PORT_MAX_LEN);
+	port[PORT_MAX_LEN - 1] = '\0';
 
 	return 0;
 }
