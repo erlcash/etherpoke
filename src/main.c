@@ -7,13 +7,15 @@
 #include <signal.h>
 #include <limits.h>
 #include <errno.h>
+#include <time.h>
 #include <pcap.h>
+#include <poll.h>
+#include <netdb.h>
 #include <libconfig.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <poll.h>
+#include <sys/types.h>
 #include <getopt.h>
-#include <time.h>
 #include <syslog.h>
 #include <wordexp.h>
 #include <unistd.h>
@@ -21,21 +23,22 @@
 #include "config.h"
 #include "etherpoke.h"
 #include "session_data.h"
-#include "sock.h"
 #include "pathname.h"
 #include "hostformat.h"
 
-#define SELECT_TIMEOUT_MS 700
-
-#define ACCEPT_MAX 32
-
 #define WORDEXP_FLAGS WRDE_UNDEF
+
+const unsigned int SELECT_TIMEOUT_MS = 700;
+const unsigned int ACCEPT_MAX = 32;
+const unsigned int LISTEN_QUEUE_LEN = 32;
 
 struct option_data
 {
 	uint32_t accept_max;
-	uint32_t port;
+	uint32_t ip_version;
+	char port[PORT_MAX_LEN];
 	char hostname[HOST_NAME_MAX];
+	uint8_t tcp_event;
 	uint8_t daemon;
 };
 
@@ -47,8 +50,10 @@ etherpoke_help (const char *p)
 {
 	fprintf (stdout, "Usage: %s [OPTIONS] <FILE>\n\n"
 					 "Options:\n"
-					 "  -d, --daemon              run as a daemon\n"
+					 "  -4                        use IPv4 only\n"
+					 "  -6                        use IPv6 only\n"
 					 "  -t, --hostname=HOST:PORT  bind to address/hostname and port\n"
+					 "  -d, --daemon              run as a daemon\n"
 					 "  -m, --accept-max=NUM      accept maximum of NUM concurrent client connections\n"
 					 "  -h, --help                show this usage information\n"
 					 "  -v, --version             show version information\n"
@@ -86,6 +91,8 @@ main (int argc, char *argv[])
 	struct option opt_long[] = {
 		{ "daemon", no_argument, 0, 'd' },
 		{ "hostname", required_argument, 0, 't' },
+		{ NULL, no_argument, 0, '4' },
+		{ NULL, no_argument, 0, '6' },
 		{ "accept-max", required_argument, 0, 'm' },
 		{ "help", no_argument, 0, 'h' },
 		{ "version", no_argument, 0, 'v' },
@@ -102,32 +109,31 @@ main (int argc, char *argv[])
 	memset (&path_config, 0, sizeof (struct pathname));
 	memset (&etherpoke_conf, 0, sizeof (struct config));
 
-	while ( (c = getopt_long (argc, argv, "dt:m:hv", opt_long, &opt_index)) != -1 ){
+	while ( (c = getopt_long (argc, argv, "dt:46m:hv", opt_long, &opt_index)) != -1 ){
 		switch ( c ){
 			case 'd':
 				opt.daemon = 1;
 				break;
 
 			case 't':
-				rval = hostformat_parse (optarg, opt.hostname, (int*) &(opt.port));
+				rval = hostformat_parse (optarg, opt.hostname, opt.port);
 
-				if ( rval == -1 ){
+				if ( rval == -1 || strlen (opt.hostname) == 0 || strlen (opt.hostname) == 0 ){
 					fprintf (stderr, "%s: invalid hostname format (expects HOSTNAME:PORT)\n", argv[0]);
 					exitno = EXIT_FAILURE;
 					goto cleanup;
 				}
 
-				if ( opt.port < 1 || opt.port > 65535 ){
-					fprintf (stderr, "%s: port out of range\n", argv[0]);
-					exitno = EXIT_FAILURE;
-					goto cleanup;
-				}
+				opt.ip_version = AF_UNSPEC;
+				opt.tcp_event = 1;
+				break;
 
-				if ( opt.port == 0 ){
-					fprintf (stderr, "%s: invalid port number\n", argv[0]);
-					exitno = EXIT_FAILURE;
-					goto cleanup;
-				}
+			case '4':
+				opt.ip_version = AF_INET;
+				break;
+
+			case '6':
+				opt.ip_version = AF_INET6;
 				break;
 
 			case 'm':
@@ -202,25 +208,66 @@ main (int argc, char *argv[])
 
 	poll_len = filter_cnt + 1;
 
-	if ( opt.port ){
+	if ( opt.tcp_event ){
+		struct addrinfo *host_addr, addr_hint;
+		int opt_val;
+
 		// Increase poll size to accommodate socket descriptors for clients.
 		poll_len += opt.accept_max;
+		host_addr = NULL;
 
-		sock = sock_open (AF_INET);
+		memset (&addr_hint, 0, sizeof (struct addrinfo));
+
+		// Setup addrinfo hints
+		addr_hint.ai_family = opt.ip_version;
+		addr_hint.ai_socktype = SOCK_STREAM;
+		addr_hint.ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_ADDRCONFIG;
+
+		rval = getaddrinfo (opt.hostname, opt.port, &addr_hint, &host_addr);
+
+		if ( rval != 0 ){
+			fprintf (stderr, "%s: hostname resolve failed: %s\n", argv[0], gai_strerror (rval));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
+		sock = socket (host_addr->ai_family, host_addr->ai_socktype | SOCK_NONBLOCK, host_addr->ai_protocol);
 
 		if ( sock == -1 ){
+			freeaddrinfo (host_addr);
 			fprintf (stderr, "%s: cannot create socket: %s\n", argv[0], strerror (errno));
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
 
-		rval = sock_listen (sock, opt.hostname, opt.port);
+		opt_val = 1;
 
-		if ( rval == -1 ){
-			fprintf (stderr, "%s: binding on %s:%u failed: %s\n", argv[0], opt.hostname, opt.port, strerror (errno));
+		if ( setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof (opt_val)) == -1 ){
+			freeaddrinfo (host_addr);
+			fprintf (stderr, "%s: cannot set socket options: %s\n", argv[0], strerror (errno));
 			exitno = EXIT_FAILURE;
 			goto cleanup;
 		}
+
+		rval = bind (sock, (struct sockaddr*) host_addr->ai_addr, host_addr->ai_addrlen);
+
+		if ( rval == -1 ){
+			freeaddrinfo (host_addr);
+			fprintf (stderr, "%s: cannot bind to address: %s\n", argv[0], strerror (errno));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
+		rval = listen (sock, LISTEN_QUEUE_LEN);
+
+		if ( rval == -1 ){
+			freeaddrinfo (host_addr);
+			fprintf (stderr, "%s: %s\n", argv[0], strerror (errno));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
+		freeaddrinfo (host_addr);
 	}
 
 	pcap_session = (struct session_data*) calloc (filter_cnt, sizeof (struct session_data));
@@ -460,8 +507,8 @@ main (int argc, char *argv[])
 
 	syslog (LOG_INFO, "Etherpoke started (loaded filters: %u)", filter_cnt);
 
-	if ( opt.port )
-		syslog (LOG_INFO, "Event notifications available via %s:%hu (ACCEPT_MAX: %u)", opt.hostname, opt.port, opt.accept_max);
+	if ( opt.tcp_event )
+		syslog (LOG_INFO, "Event notifications available via %s:%s (ACCEPT_MAX: %u)", opt.hostname, opt.port, opt.accept_max);
 
 	//
 	// Main loop
@@ -514,7 +561,7 @@ main (int argc, char *argv[])
 		}
 
 		// Take care of incoming client data.  At this point only shutdown and
-		// close is handled, no input is expected from the clients.
+		// close is handled, no other input is expected from the clients.
 		for ( i = (filter_cnt + 1); i < poll_len; i++ ){
 			if ( (poll_fd[i].revents & POLLIN) || (poll_fd[i].revents & POLLERR) ){
 				char nok[128];
