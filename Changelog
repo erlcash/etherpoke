@@ -1,3 +1,21 @@
+version 2.4.0
+-------------
+
+* Option '-l, --listen' is no longer supported. This option was removed in
+favor for a new option '-t, --hostname'.
+
+* New option '-t, --hostname' allows to specify an address/hostname and port
+number to which etherpoke should bind and listen on for incoming client
+connections.  This option supersedes option '-l, --listen' as it allows to
+change otherwise default address 0.0.0.0. This feature addresses the complains
+about etherpoke being exposed to LAN/WAN network when used only locally.
+
+* Notifications via IPv6.
+
+* New options '-4' and '-6' to control how the hostname gets resolved when
+'-t, --hostname' is used. If '-4' is in effect IPv4 gets precedence over
+IPv6 and vice versa.
+
 version 2.3.1
 -------------
 
@@ -7,9 +25,9 @@ configuration file became invalid. See issue #2.
 version 2.3.0
 -------------
 
-* Support for sockets (TCP/UNIX domain) as an alternative to execv(3). This
-feature allows remote systems to be notified immediately after event occurs
-without unnecessary overhead.
+* Support for TCP sockets as an alternative to execv(3). This feature allows
+remote systems to be notified immediately after event occurs without
+unnecessary overhead.
 
 * New configuration options 'notify_sock', 'notify_exec'. If set to true,
 'notify_sock' sends notification message (FILTER_NAME:EVT) to all connected
