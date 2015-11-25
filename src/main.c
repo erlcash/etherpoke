@@ -63,7 +63,7 @@ etherpoke_help (const char *p)
 static void
 etherpoke_version (const char *p)
 {
-	fprintf (stdout, "%s %d.%d.%d\n", p, ETHERPOKE_VER_MAJOR, ETHERPOKE_VER_MINOR, ETHERPOKE_VER_PATCH);
+	fprintf (stdout, "%s %d.%d.%d\n%s\n", p, ETHERPOKE_VER_MAJOR, ETHERPOKE_VER_MINOR, ETHERPOKE_VER_PATCH, pcap_lib_version ());
 }
 
 static void
