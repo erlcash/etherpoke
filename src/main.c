@@ -28,9 +28,9 @@
 
 #define WORDEXP_FLAGS WRDE_UNDEF
 
-const unsigned int SELECT_TIMEOUT_MS = 700;
-const unsigned int ACCEPT_MAX = 32;
-const unsigned int LISTEN_QUEUE_LEN = 32;
+static const unsigned int SELECT_TIMEOUT_MS = 700;
+static const unsigned int ACCEPT_MAX = 32;
+static const unsigned int LISTEN_QUEUE_LEN = 32;
 
 struct option_data
 {
