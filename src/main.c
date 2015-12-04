@@ -30,7 +30,7 @@
 
 static const unsigned int SELECT_TIMEOUT_MS = 700;
 static const unsigned int ACCEPT_MAX = 32;
-static const unsigned int LISTEN_QUEUE_LEN = 32;
+static const unsigned int LISTEN_QUEUE_LEN = 8;
 
 struct option_data
 {
@@ -206,14 +206,14 @@ main (int argc, char *argv[])
 		goto cleanup;
 	}
 
-	poll_len = filter_cnt + 1;
+	poll_len = filter_cnt;
 
 	if ( opt.tcp_event ){
 		struct addrinfo *host_addr, addr_hint;
 		int opt_val;
 
 		// Increase poll size to accommodate socket descriptors for clients.
-		poll_len += opt.accept_max;
+		poll_len += opt.accept_max + 1;
 		host_addr = NULL;
 
 		memset (&addr_hint, 0, sizeof (struct addrinfo));
@@ -528,7 +528,8 @@ main (int argc, char *argv[])
 				continue;
 
 			syslog (LOG_ERR, "poll(2) failed: %s", strerror (errno));
-			break;
+			exitno = EXIT_FAILURE;
+			goto cleanup;
 		}
 
 		// Accept incoming connection
@@ -545,19 +546,19 @@ main (int argc, char *argv[])
 
 			// Find unused place in the poll array
 			for ( j = (filter_cnt + 1); j < poll_len; j++ ){
-				if ( poll_fd[j].fd != -1 )
-					continue;
-
-				poll_fd[j].fd = sock_new;
-				sock_new = -1;
+				if ( poll_fd[j].fd == -1 ){
+					poll_fd[j].fd = sock_new;
+					sock_new = -1;
+					break;
+				}
 			}
 
 			if ( sock_new != -1 ){
-				syslog (LOG_INFO, "connection refused: too many concurrent connections");
+				syslog (LOG_INFO, "Client refused: too many concurrent connections");
 				close (sock_new);
+			} else {
+				syslog (LOG_INFO, "Client connected...");
 			}
-
-			syslog (LOG_INFO, "Client connected...");
 		}
 
 		// Take care of incoming client data.  At this point only shutdown and
@@ -662,8 +663,8 @@ main (int argc, char *argv[])
 
 				if ( pid == -1 ){
 					syslog (LOG_ERR, "cannot fork the process: %s", strerror (errno));
-					main_loop = 0;
-					break;
+					exitno = EXIT_FAILURE;
+					goto cleanup;
 				}
 
 				// Parent process, carry on...
@@ -676,6 +677,7 @@ main (int argc, char *argv[])
 				if ( rval == -1 )
 					syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", filter_iter->name, strerror (errno));
 
+				exitno = EXIT_FAILURE;
 				goto cleanup;
 			}
 		}
