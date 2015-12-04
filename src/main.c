@@ -206,14 +206,20 @@ main (int argc, char *argv[])
 		goto cleanup;
 	}
 
-	poll_len = filter_cnt;
+	// Allocate enough memory for filters (+1 means that we are also allocating
+	// space for listening socket).
+	// NOTE: always allocate space for listening socket here, to move this
+	// allocation inside the block below (where listening socket is actually
+	// allocated) is not a good idea as more complex condition would have to be
+	// used inside the main loop.
+	poll_len = filter_cnt + 1;
 
 	if ( opt.tcp_event ){
 		struct addrinfo *host_addr, addr_hint;
 		int opt_val;
 
 		// Increase poll size to accommodate socket descriptors for clients.
-		poll_len += opt.accept_max + 1;
+		poll_len += opt.accept_max;
 		host_addr = NULL;
 
 		memset (&addr_hint, 0, sizeof (struct addrinfo));
@@ -578,6 +584,7 @@ main (int argc, char *argv[])
 
 		time (&current_time);
 
+		// Handle changes on pcap file descriptors
 		for ( i = 0, filter_iter = etherpoke_conf.head; filter_iter != NULL; i++, filter_iter = filter_iter->next ){
 			wordexp_t *cmd_exp;
 			const char *evt_str;
