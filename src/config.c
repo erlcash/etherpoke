@@ -69,28 +69,33 @@ filter_set_interface (struct config_filter *filter, const char *interface)
 static int
 filter_set_event (struct config_filter *filter, const char *cmd, int type)
 {
-	char **event_type;
+	char **filter_event;
 	
 	switch ( type ){
 		case SE_BEG:
-			event_type = &(filter->session_begin);
+			filter_event = &(filter->session_begin);
 			break;
 		case SE_END:
-			event_type = &(filter->session_end);
+			filter_event = &(filter->session_end);
 			break;
 		case SE_ERR:
-			event_type = &(filter->session_error);
+			filter_event = &(filter->session_error);
 			break;
 		default:
 			return 1;
 	}
 	
-	if ( *event_type != NULL )
-		free (*event_type);
+	if ( *filter_event != NULL )
+		free (*filter_event);
+
+	if ( cmd == NULL ){
+		*filter_event = NULL;
+		return 0;
+	}
 	
-	*event_type = strdup (cmd);
+	*filter_event = strdup (cmd);
 	
-	if ( *event_type == NULL )
+	if ( *filter_event == NULL )
 		return 1;
 	
 	return 0;
@@ -188,7 +193,7 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 
 		// Just in case... we do not want to touch the NULL pointer
 		if ( filter_setting == NULL ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "not filters defined");
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "no filters defined");
 			free (filter);
 			config_destroy (&libconfig);
 			return -1;
@@ -204,6 +209,13 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 			return -1;
 		}
 
+		if ( strlen (str_val) > CONF_FILTER_NAME_MAXLEN ){
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "filter name too long");
+			free (filter);
+			config_destroy (&libconfig);
+			return -1;
+		}
+
 		filter_set_name (filter, str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "match", &str_val) == CONFIG_FALSE ){
@@ -213,31 +225,19 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 		filter_set_matchrule (filter, str_val);
 
 		if ( config_setting_lookup_string (filter_setting, "session_begin", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_begin'", filter->name);
-			free (filter);
-			config_unload (conf);
-			config_destroy (&libconfig);
-			return -1;
+			str_val = NULL;
 		}
-	
+
 		filter_set_event (filter, str_val, SE_BEG);
 	
 		if ( config_setting_lookup_string (filter_setting, "session_end", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_end'", filter->name);
-			free (filter);
-			config_unload (conf);
-			config_destroy (&libconfig);
-			return -1;
+			str_val = NULL;
 		}
-	
+
 		filter_set_event (filter, str_val, SE_END);
 
 		if ( config_setting_lookup_string (filter_setting, "session_error", &str_val) == CONFIG_FALSE ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_error'", filter->name);
-			free (filter);
-			config_unload (conf);
-			config_destroy (&libconfig);
-			return -1;
+			str_val = NULL;
 		}
 
 		filter_set_event (filter, str_val, SE_ERR);
@@ -251,7 +251,7 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 		}
 
 		if ( num == 0 ){
-			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', zero 'session_timeout' is not allowed", filter->name);
+			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', 'session_timeout' must be greater than 0", filter->name);
 			free (filter);
 			config_unload (conf);
 			config_destroy (&libconfig);
