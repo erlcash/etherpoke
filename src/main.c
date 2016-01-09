@@ -38,6 +38,7 @@ struct option_data
 	uint32_t ip_version;
 	char port[PORT_MAX_LEN];
 	char hostname[HOST_NAME_MAX];
+	uint8_t verbose;
 	uint8_t tcp_event;
 	uint8_t daemon;
 };
@@ -50,11 +51,12 @@ etherpoke_help (const char *p)
 {
 	fprintf (stdout, "Usage: %s [OPTIONS] <FILE>\n\n"
 					 "Options:\n"
-					 "  -4                        use IPv4 only\n"
-					 "  -6                        use IPv6 only\n"
+					 "  -4                        bind to IPv4 address\n"
+					 "  -6                        bind to IPv6 address\n"
 					 "  -t, --hostname=HOST:PORT  bind to address/hostname and port\n"
 					 "  -d, --daemon              run as a daemon\n"
 					 "  -m, --accept-max=NUM      accept maximum of NUM concurrent client connections\n"
+					 "  -V, --verbose             increase verbosity\n"
 					 "  -h, --help                show this usage information\n"
 					 "  -v, --version             show version information\n"
 					 , p);
@@ -89,14 +91,15 @@ main (int argc, char *argv[])
 	pid_t pid;
 	int i, c, j, rval, syslog_flags, opt_index, filter_cnt, sock, poll_len;
 	struct option opt_long[] = {
-		{ "daemon", no_argument, 0, 'd' },
-		{ "hostname", required_argument, 0, 't' },
-		{ NULL, no_argument, 0, '4' },
-		{ NULL, no_argument, 0, '6' },
-		{ "accept-max", required_argument, 0, 'm' },
-		{ "help", no_argument, 0, 'h' },
-		{ "version", no_argument, 0, 'v' },
-		{ NULL, 0, 0, 0 }
+		{ "", no_argument, NULL, '4' },
+		{ "", no_argument, NULL, '6' },
+		{ "hostname", required_argument, NULL, 't' },
+		{ "daemon", no_argument, NULL, 'd' },
+		{ "accept-max", required_argument, NULL, 'm' },
+		{ "verbose", no_argument, NULL, 'V' },
+		{ "help", no_argument, NULL, 'h' },
+		{ "version", no_argument, NULL, 'v' },
+		{ NULL, 0, NULL, 0 }
 	};
 
 	sock = -1;
@@ -109,7 +112,7 @@ main (int argc, char *argv[])
 	memset (&path_config, 0, sizeof (struct pathname));
 	memset (&etherpoke_conf, 0, sizeof (struct config));
 
-	while ( (c = getopt_long (argc, argv, "dt:46m:hv", opt_long, &opt_index)) != -1 ){
+	while ( (c = getopt_long (argc, argv, "46t:dm:Vhv", opt_long, &opt_index)) != -1 ){
 		switch ( c ){
 			case 'd':
 				opt.daemon = 1;
@@ -144,6 +147,10 @@ main (int argc, char *argv[])
 					exitno = EXIT_FAILURE;
 					goto cleanup;
 				}
+				break;
+
+			case 'V':
+				opt.verbose = 1;
 				break;
 
 			case 'h':
@@ -285,20 +292,34 @@ main (int argc, char *argv[])
 	}
 
 	for ( i = 0, filter_iter = etherpoke_conf.head; filter_iter != NULL; i++, filter_iter = filter_iter->next ){
-		struct bpf_program bpf_prog;
 		int link_type;
 
 		session_data_init (&(pcap_session[i]));
 
 		if ( filter_iter->notify & NOTIFY_EXEC ){
-			rval = wordexp (filter_iter->session_begin, &(pcap_session[i].evt_cmd_beg), WORDEXP_FLAGS);
 
-			if ( rval == 0 )
+			if ( filter_iter->session_begin != NULL ){
+				rval = wordexp (filter_iter->session_begin, &(pcap_session[i].evt_cmd_beg), WORDEXP_FLAGS);
+
+				if ( rval != 0 )
+					goto filter_error;
+			}
+
+			if ( filter_iter->session_error != NULL ){
 				rval = wordexp (filter_iter->session_error, &(pcap_session[i].evt_cmd_err), WORDEXP_FLAGS);
 
-			if ( rval == 0 )
+				if ( rval != 0 )
+					goto filter_error;
+			}
+
+			if ( filter_iter->session_end != NULL ){
 				rval = wordexp (filter_iter->session_end, &(pcap_session[i].evt_cmd_end), WORDEXP_FLAGS);
 
+				if ( rval != 0 )
+					goto filter_error;
+			}
+
+filter_error:
 			switch ( rval ){
 				case WRDE_SYNTAX:
 					fprintf (stderr, "%s: invalid event hook in '%s': syntax error\n", argv[0], filter_iter->name);
@@ -402,6 +423,8 @@ main (int argc, char *argv[])
 		}
 
 		if ( filter_iter->match != NULL ){
+			struct bpf_program bpf_prog;
+
 			rval = pcap_compile (pcap_session[i].handle, &bpf_prog, filter_iter->match, 0, PCAP_NETMASK_UNKNOWN);
 
 			if ( rval == -1 ){
@@ -430,8 +453,6 @@ main (int argc, char *argv[])
 		}
 	}
 
-	// Allocate enough resources to hold file descriptors for each pcap handle,
-	// plus one listening socket, plus --accept-max socket descriptors.
 	poll_fd = (struct pollfd*) malloc (sizeof (struct pollfd) * poll_len);
 
 	if ( poll_fd == NULL ){
@@ -560,23 +581,26 @@ main (int argc, char *argv[])
 			}
 
 			if ( sock_new != -1 ){
-				syslog (LOG_INFO, "Client refused: too many concurrent connections");
+				if ( opt.verbose )
+					syslog (LOG_INFO, "Client refused: too many concurrent connections");
 				close (sock_new);
 			} else {
-				syslog (LOG_INFO, "Client connected...");
+				if ( opt.verbose )
+					syslog (LOG_INFO, "Client connected...");
 			}
 		}
 
 		// Take care of incoming client data.  At this point only shutdown and
 		// close is handled, no other input is expected from the clients.
 		for ( i = (filter_cnt + 1); i < poll_len; i++ ){
-			if ( (poll_fd[i].revents & POLLIN) || (poll_fd[i].revents & POLLERR) ){
+			if ( poll_fd[i].revents & POLLIN ){
 				char nok[128];
 
 				rval = recv (poll_fd[i].fd, &nok, sizeof (nok), 0);
 
 				if ( rval <= 0 ){
-					syslog (LOG_INFO, "Client disconnected...");
+					if ( opt.verbose )
+						syslog (LOG_INFO, "Client disconnected...");
 					poll_fd[i].fd = -1;
 				}
 			}
@@ -629,21 +653,26 @@ main (int argc, char *argv[])
 					pcap_session[i].evt.ts = 0;
 					break;
 
+				case SE_NUL:
+					// There was no change on this file descriptor, skip to
+					// another one. 'continue' may seem a bit confusing here,
+					// but it applies to a loop above. Not sure how other
+					// compilers will behave (other than gcc).
+					continue;
+
 				default:
-					cmd_exp = NULL;
-					evt_str = NULL;
-					break;
+					// Undefined state... What to do, other than die?
+					syslog (LOG_ERR, "undefined event type");
+					exitno = EXIT_FAILURE;
+					goto cleanup;
 			}
 
-			if ( evt_str != NULL )
+			if ( opt.verbose )
 				syslog (LOG_INFO, "%s:%s", filter_iter->name, evt_str);
 
 			// Send socket notification
 			if ( filter_iter->notify & NOTIFY_SOCK ){
-				char msg[128];
-
-				if ( evt_str == NULL )
-					continue;
+				char msg[CONF_FILTER_NAME_MAXLEN + 5];
 
 				snprintf (msg, sizeof (msg), "%s:%s", filter_iter->name, evt_str);
 
@@ -655,6 +684,7 @@ main (int argc, char *argv[])
 
 					if ( rval == -1 ){
 						syslog (LOG_WARNING, "failed to send notification: %s", strerror (errno));
+						close (poll_fd[j].fd);
 						poll_fd[j].fd = -1;
 					}
 				}
@@ -663,7 +693,8 @@ main (int argc, char *argv[])
 			// Execute event hook
 			if ( filter_iter->notify & NOTIFY_EXEC ){
 
-				if ( cmd_exp == NULL )
+				// Expansion was not made...
+				if ( cmd_exp->we_wordc == 0 )
 					continue;
 
 				pid = fork ();
@@ -679,10 +710,12 @@ main (int argc, char *argv[])
 					continue;
 
 				errno = 0;
-				rval = execv (cmd_exp->we_wordv[0], cmd_exp->we_wordv);
 
-				if ( rval == -1 )
-					syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", filter_iter->name, strerror (errno));
+				execv (cmd_exp->we_wordv[0], cmd_exp->we_wordv);
+
+				// This code gets executed only if execv(2) fails. Wrapping
+				// this code in a condition is unneccessary.
+				syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", filter_iter->name, strerror (errno));
 
 				exitno = EXIT_FAILURE;
 				goto cleanup;
