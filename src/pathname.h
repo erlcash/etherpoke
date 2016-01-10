@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 - 2015, CodeWard.org
+ * Copyright (c) 2013 - 2016, CodeWard.org
  */
 #ifndef _PATHNAME_H
 #define _PATHNAME_H

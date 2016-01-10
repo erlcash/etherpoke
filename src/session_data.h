@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 - 2015, CodeWard.org
+ * Copyright (c) 2013 - 2016, CodeWard.org
  */
 #ifndef _SESSION_DATA_H
 #define _SESSION_DATA_H
