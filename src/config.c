@@ -178,6 +178,12 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 	root_setting = config_root_setting (&libconfig);
 	filter_cnt = config_setting_length (root_setting);
 
+	if ( filter_cnt > CONF_FILTER_MAXCNT ){
+		snprintf (errbuf, CONF_ERRBUF_SIZE, "too many filters defined (max %d)", CONF_FILTER_MAXCNT);
+		config_destroy (&libconfig);
+		return -1;
+	}
+
 	memset (errbuf, 0, sizeof (CONF_ERRBUF_SIZE));
 
 	for ( i = 0; i < filter_cnt; i++ ){

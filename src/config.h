@@ -7,8 +7,10 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#define CONF_ERRBUF_SIZE 256
 #define CONF_FILTER_NAME_MAXLEN 128
+#define CONF_FILTER_MAXCNT 256
+
+#define CONF_ERRBUF_SIZE 256
 
 enum
 {
