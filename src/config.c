@@ -334,5 +334,8 @@ config_unload (struct config *conf)
 		free (filter);
 		filter = filter_next;
 	}
+
+	conf->head = NULL;
+	conf->tail = conf->head;
 }
 
