@@ -88,6 +88,10 @@ main (int argc, char *argv[])
 	char pcap_errbuff[PCAP_ERRBUF_SIZE];
 	struct pathname path_config;
 	struct sigaction sa;
+#ifdef DBG_AVG_LOOP_SPEED
+	clock_t clock_start;
+	double clock_avg;
+#endif
 	pid_t pid;
 	int i, c, j, rval, syslog_flags, opt_index, filter_cnt, sock, poll_len;
 	struct option opt_long[] = {
@@ -107,6 +111,9 @@ main (int argc, char *argv[])
 	pcap_session = NULL;
 	exitno = EXIT_SUCCESS;
 	syslog_flags = LOG_PID | LOG_PERROR;
+#ifdef DBG_AVG_LOOP_SPEED
+	clock_avg = 0;
+#endif
 
 	memset (&opt, 0, sizeof (struct option_data));
 	memset (&path_config, 0, sizeof (struct pathname));
@@ -121,7 +128,7 @@ main (int argc, char *argv[])
 			case 't':
 				rval = hostformat_parse (optarg, opt.hostname, opt.port);
 
-				if ( rval == -1 || strlen (opt.hostname) == 0 || strlen (opt.hostname) == 0 ){
+				if ( rval == -1 || strlen (opt.hostname) == 0 || strlen (opt.port) == 0 ){
 					fprintf (stderr, "%s: invalid hostname format (expects HOSTNAME:PORT)\n", argv[0]);
 					exitno = EXIT_FAILURE;
 					goto cleanup;
@@ -296,6 +303,17 @@ main (int argc, char *argv[])
 
 		session_data_init (&(pcap_session[i]));
 
+		pcap_session[i].timeout = filter_iter->session_timeout;
+		pcap_session[i].evt_mask = filter_iter->notify;
+
+		pcap_session[i].filter_name = strdup (filter_iter->name);
+
+		if ( pcap_session[i].filter_name == NULL ){
+			fprintf (stderr, "%s: cannot allocate memory: %s\n", argv[0], strerror (errno));
+			exitno = EXIT_FAILURE;
+			goto cleanup;
+		}
+
 		if ( filter_iter->notify & NOTIFY_EXEC ){
 
 			if ( filter_iter->session_begin != NULL ){
@@ -453,6 +471,10 @@ filter_error:
 		}
 	}
 
+	// We no longer need data stored in config structure. All neccessary data
+	// were moved into session_data structure.
+	config_unload (&etherpoke_conf);
+
 	poll_fd = (struct pollfd*) malloc (sizeof (struct pollfd) * poll_len);
 
 	if ( poll_fd == NULL ){
@@ -469,7 +491,7 @@ filter_error:
 		// ... listening socket...
 		else if ( i == filter_cnt )
 			poll_fd[i].fd = sock;
-		// ... invalid file descriptors (to be ignored by poll)...
+		// ... invalid file descriptors (will be ignored by poll(2)), in space reserved for client sockets...
 		else
 			poll_fd[i].fd = -1;
 
@@ -559,6 +581,10 @@ filter_error:
 			goto cleanup;
 		}
 
+#ifdef DBG_AVG_LOOP_SPEED
+		clock_start = clock ();
+#endif
+
 		// Accept incoming connection
 		if ( poll_fd[filter_cnt].revents & POLLIN ){
 			int sock_new;
@@ -596,11 +622,13 @@ filter_error:
 			if ( poll_fd[i].revents & POLLIN ){
 				char nok[128];
 
-				rval = recv (poll_fd[i].fd, &nok, sizeof (nok), 0);
+				errno = 0;
+				rval = recv (poll_fd[i].fd, &nok, sizeof (nok), MSG_DONTWAIT);
 
-				if ( rval <= 0 ){
+				if ( rval <= 0 && (errno != EAGAIN && errno != EWOULDBLOCK) ){
 					if ( opt.verbose )
 						syslog (LOG_INFO, "Client disconnected...");
+					close (poll_fd[i].fd);
 					poll_fd[i].fd = -1;
 				}
 			}
@@ -609,7 +637,7 @@ filter_error:
 		time (&current_time);
 
 		// Handle changes on pcap file descriptors
-		for ( i = 0, filter_iter = etherpoke_conf.head; filter_iter != NULL; i++, filter_iter = filter_iter->next ){
+		for ( i = 0; i < filter_cnt; i++ ){
 			wordexp_t *cmd_exp;
 			const char *evt_str;
 
@@ -628,11 +656,18 @@ filter_error:
 			}
 
 			if ( (pcap_session[i].evt.ts > 0)
-					&& (difftime (current_time, pcap_session[i].evt.ts) >= filter_iter->session_timeout) ){
+					&& (difftime (current_time, pcap_session[i].evt.ts) >= pcap_session[i].timeout) ){
 				pcap_session[i].evt.type = SE_END;
 			}
 
 			switch ( pcap_session[i].evt.type ){
+				case SE_NUL:
+					// There was no change on this file descriptor, skip to
+					// another one. 'continue' may seem a bit confusing here,
+					// but it applies to a loop above. Not sure how other
+					// compilers will behave (other than gcc).
+					continue;
+
 				case SE_BEG:
 					evt_str = "BEG";
 					cmd_exp = &(pcap_session[i].evt_cmd_beg);
@@ -653,13 +688,6 @@ filter_error:
 					pcap_session[i].evt.ts = 0;
 					break;
 
-				case SE_NUL:
-					// There was no change on this file descriptor, skip to
-					// another one. 'continue' may seem a bit confusing here,
-					// but it applies to a loop above. Not sure how other
-					// compilers will behave (other than gcc).
-					continue;
-
 				default:
 					// Undefined state... What to do, other than die?
 					syslog (LOG_ERR, "undefined event type");
@@ -668,21 +696,22 @@ filter_error:
 			}
 
 			if ( opt.verbose )
-				syslog (LOG_INFO, "%s:%s", filter_iter->name, evt_str);
+				syslog (LOG_INFO, "%s:%s", pcap_session[i].filter_name, evt_str);
 
 			// Send socket notification
-			if ( filter_iter->notify & NOTIFY_SOCK ){
+			if ( pcap_session[i].evt_mask & NOTIFY_SOCK ){
 				char msg[CONF_FILTER_NAME_MAXLEN + 5];
 
-				snprintf (msg, sizeof (msg), "%s:%s", filter_iter->name, evt_str);
+				snprintf (msg, sizeof (msg), "%s:%s", pcap_session[i].filter_name, evt_str);
 
 				for ( j = (filter_cnt + 1); j < poll_len; j++ ){
 					if ( poll_fd[j].fd == -1 )
 						continue;
 
-					rval = send (poll_fd[j].fd, msg, strlen (msg) + 1, MSG_NOSIGNAL);
+					errno = 0;
+					rval = send (poll_fd[j].fd, msg, strlen (msg) + 1, MSG_NOSIGNAL | MSG_DONTWAIT);
 
-					if ( rval == -1 ){
+					if ( rval == -1 && (errno != EAGAIN && errno != EWOULDBLOCK) ){
 						syslog (LOG_WARNING, "failed to send notification: %s", strerror (errno));
 						close (poll_fd[j].fd);
 						poll_fd[j].fd = -1;
@@ -690,8 +719,8 @@ filter_error:
 				}
 			}
 
-			// Execute event hook
-			if ( filter_iter->notify & NOTIFY_EXEC ){
+			// Execute an event hook
+			if ( pcap_session[i].evt_mask & NOTIFY_EXEC ){
 
 				// Expansion was not made...
 				if ( cmd_exp->we_wordc == 0 )
@@ -710,17 +739,22 @@ filter_error:
 					continue;
 
 				errno = 0;
-
 				execv (cmd_exp->we_wordv[0], cmd_exp->we_wordv);
 
-				// This code gets executed only if execv(2) fails. Wrapping
+				// This code gets executed only if execv(3) fails. Wrapping
 				// this code in a condition is unneccessary.
-				syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", filter_iter->name, strerror (errno));
+				syslog (LOG_WARNING, "cannot execute event hook in '%s': %s", pcap_session[i].filter_name, strerror (errno));
 
 				exitno = EXIT_FAILURE;
 				goto cleanup;
 			}
 		}
+
+#ifdef DBG_AVG_LOOP_SPEED
+		clock_avg = (clock_avg + (clock () - clock_start)) / 2;
+
+		syslog (LOG_DEBUG, "Average loop speed: %lf", (double) (clock_avg / CLOCKS_PER_SEC));
+#endif
 	}
 
 	syslog (LOG_INFO, "Etherpoke shutdown (signal %u)", exitno);
