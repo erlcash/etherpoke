@@ -1,3 +1,27 @@
+version 2.5.0
+-------------
+
+* Treat event hook definitions (session_begin, session_error, session_end) as
+optional.
+
+* New option '-V, --verbose' to increase verbosity of the process. Additional
+LOG_INFO messages shall be printed to syslog and/or stderr, such as client
+connections/disconnections and event triggers.
+
+* BUGFIX: some long options had been unrecognized.
+
+* BUGFIX: limit maximum length of a filter name to 128 Bytes. In previous
+versions, when socket notifications were enabled, a notification message which
+contained a filter name longer than 123 Bytes, was transmitted in incomplete
+fashion, due to a fixed size of an intermediate buffer used in transmission.
+
+* BUGFIX: validate hostformat properly. Port number could had been undefined
+without rising an error.
+
+* Limit maximum number of filters which can be loaded from a configuration
+file. This hard-limit can be changed by updating a value of CONF_FILTER_MAXCNT
+and recompiling.
+
 version 2.4.0
 -------------
 
