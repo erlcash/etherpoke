@@ -3,7 +3,9 @@
  */
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <libconfig.h>
 
 #include "session_event.h"
@@ -164,10 +166,23 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 	config_setting_t *root_setting;
 	config_setting_t *filter_setting;
 	struct config_filter *filter;
+	struct stat fstat;
 	const char *str_val;
 	int i, filter_cnt, num;
 
 	config_init (&libconfig);
+
+	if ( stat (filename, &fstat) == -1 ){
+		snprintf (errbuf, CONF_ERRBUF_SIZE, "%s", strerror (errno));
+		config_destroy (&libconfig);
+		return -1;
+	}
+
+	if ( S_ISDIR (fstat.st_mode) ){
+		snprintf (errbuf, CONF_ERRBUF_SIZE, "is a directory");
+		config_destroy (&libconfig);
+		return -1;
+	}
 
 	if ( config_read_file (&libconfig, filename) == CONFIG_FALSE ){
 		snprintf (errbuf, CONF_ERRBUF_SIZE, "%s on line %d", config_error_text (&libconfig), config_error_line (&libconfig));
@@ -250,6 +265,7 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 	
 		if ( config_setting_lookup_int (filter_setting, "session_timeout", &num) == CONFIG_FALSE ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'session_timeout'", filter->name);
+			filter_destroy (filter);
 			free (filter);
 			config_unload (conf);
 			config_destroy (&libconfig);
@@ -258,6 +274,7 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 
 		if ( num == 0 ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', 'session_timeout' must be greater than 0", filter->name);
+			filter_destroy (filter);
 			free (filter);
 			config_unload (conf);
 			config_destroy (&libconfig);
@@ -274,6 +291,7 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 
 		if ( config_setting_lookup_string (filter_setting, "interface", &str_val) == CONFIG_FALSE ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', missing option 'interface'", filter->name);
+			filter_destroy (filter);
 			free (filter);
 			config_unload (conf);
 			config_destroy (&libconfig);
@@ -282,6 +300,7 @@ config_load (struct config *conf, const char *filename, char *errbuf)
 
 		if ( strlen (str_val) == 0 ){
 			snprintf (errbuf, CONF_ERRBUF_SIZE, "in filter '%s', empty option 'interface'", filter->name);
+			filter_destroy (filter);
 			free (filter);
 			config_unload (conf);
 			config_destroy (&libconfig);
