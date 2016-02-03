@@ -1,3 +1,21 @@
+version 2.5.1
+-------------
+
+* BUGFIX: make options '-4' and '-6', used as a hint for a hostname
+resolution, to be position independent. In case one of those options was used
+before the option '-t, --hostname', its effect was canceled out.
+
+* BUGFIX: do not use AI_ADDRCONFIG flag when resolving a hostname/address. If
+the flag is in effect on a computer without a configured IP address, resolving
+will fail.
+
+* BUGFIX: if a mandatory option had been undefined in a configuration file,
+program had been killed with unfreed memory.
+
+* BUGFIX: invalid memory access, when receiving client's data.
+
+* BUGFIX: check if a value of a parameter for '-m, --accept-max' is a number.
+
 version 2.5.0
 -------------
 
@@ -87,9 +105,9 @@ interface.
 * New event session_error. If there's an error in packet capture, fire up this
 event. The event was introduced to act upon interface shutdowns immediatelly.
 If this event is triggered before the event 'session_end', it cancels out any
-future triggers of 'session_end', until the event 'session_begin' is
-triggered again. This event is mandatory. Note that in some cases it is not
-possible to restart packet capture.
+future triggers of 'session_end', until the event 'session_begin' is triggered
+again. This event is mandatory. Note that in some cases it is not possible to
+restart packet capture.
 
 version 2.1.2
 -------------
