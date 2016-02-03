@@ -11,3 +11,8 @@ Homepage: http://codeward.org/etherpoke
 Since version 2.3.0, *etherpoke* supports socket notifications (TCP/IP protocol), allowing remote clients to be notified when one of the events is triggered.
 
 *etherpoke* is free software licensed under **GNU GPL3**.
+
+Words of caution: if you are not a developer, refrain from a compilation out of
+the source code found in the master branch. Always compile from the sources
+found in individual releases, preferably the latest one.
+
