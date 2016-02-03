@@ -150,9 +150,9 @@ main (int argc, char *argv[])
 				break;
 
 			case 'm':
-				sscanf (optarg, "%u", &(opt.accept_max));
+				rval = sscanf (optarg, "%u", &(opt.accept_max));
 
-				if ( opt.accept_max == 0 ){
+				if ( rval < 1 || opt.accept_max == 0 ){
 					fprintf (stderr, "%s: invalid number for maximum connections\n", argv[0]);
 					exitno = EXIT_FAILURE;
 					goto cleanup;
