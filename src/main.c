@@ -116,6 +116,10 @@ main (int argc, char *argv[])
 #endif
 
 	memset (&opt, 0, sizeof (struct option_data));
+
+	opt.accept_max = ACCEPT_MAX;
+	opt.ip_version = AF_UNSPEC;
+
 	memset (&path_config, 0, sizeof (struct pathname));
 	memset (&etherpoke_conf, 0, sizeof (struct config));
 
@@ -134,7 +138,6 @@ main (int argc, char *argv[])
 					goto cleanup;
 				}
 
-				opt.ip_version = AF_UNSPEC;
 				opt.tcp_event = 1;
 				break;
 
@@ -176,9 +179,6 @@ main (int argc, char *argv[])
 				goto cleanup;
 		}
 	}
-
-	if ( opt.accept_max == 0 )
-		opt.accept_max = ACCEPT_MAX;
 
 	// Check if there are some non-option arguments, these are treated as paths
 	// to configuration files.
@@ -241,7 +241,7 @@ main (int argc, char *argv[])
 		// Setup addrinfo hints
 		addr_hint.ai_family = opt.ip_version;
 		addr_hint.ai_socktype = SOCK_STREAM;
-		addr_hint.ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_ADDRCONFIG;
+		addr_hint.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
 
 		rval = getaddrinfo (opt.hostname, opt.port, &addr_hint, &host_addr);
 
@@ -623,7 +623,7 @@ filter_error:
 				char nok[128];
 
 				errno = 0;
-				rval = recv (poll_fd[i].fd, &nok, sizeof (nok), MSG_DONTWAIT);
+				rval = recv (poll_fd[i].fd, nok, sizeof (nok), MSG_DONTWAIT);
 
 				if ( rval <= 0 && (errno != EAGAIN && errno != EWOULDBLOCK) ){
 					if ( opt.verbose )
